@@ -82,6 +82,7 @@ class ImageRemixResource(Resource):
         payload = [{
             "taskType": "imageInference",
             "taskUUID": task_uuid,
+            "prompt": prompt,
             "positivePrompt": prompt,
             "seedImage": reference_image_base64,
             "width": 1024,
