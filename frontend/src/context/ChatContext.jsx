@@ -13,6 +13,27 @@ import { useAuth } from './AuthContext';
 
 const ChatContext = createContext(null);
 
+const parseResponsePayload = async (response) => {
+  if (typeof response.text === 'function') {
+    const rawText = await response.text();
+    if (!rawText) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(rawText);
+    } catch (_err) {
+      return { message: rawText.trim() };
+    }
+  }
+
+  if (typeof response.json === 'function') {
+    return response.json().catch(() => ({}));
+  }
+
+  return {};
+};
+
 const toNumber = (value) => {
   if (typeof value === 'bigint') {
     return Number(value);
@@ -269,10 +290,10 @@ export const ChatProvider = ({ children }) => {
     try {
       const response = await fetch('/api/v1/chat/friends', { credentials: 'include' });
       if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
+        const payload = await parseResponsePayload(response);
         throw new Error(payload.message || 'Failed to load chat friends.');
       }
-      const payload = await response.json();
+      const payload = await parseResponsePayload(response);
       setFriends(Array.isArray(payload) ? payload : []);
     } catch (err) {
       setError(err.message || 'Failed to load chat friends.');
@@ -320,11 +341,11 @@ export const ChatProvider = ({ children }) => {
         credentials: 'include',
       });
       if (!bootstrapResponse.ok) {
-        const payload = await bootstrapResponse.json().catch(() => ({}));
+        const payload = await parseResponsePayload(bootstrapResponse);
         throw new Error(payload.message || 'Failed to bootstrap chat connection.');
       }
 
-      const bootstrap = await bootstrapResponse.json();
+      const bootstrap = await parseResponsePayload(bootstrapResponse);
       if (!bootstrap?.ws_url || !bootstrap?.db_name || !bootstrap?.websocket_token) {
         throw new Error('Chat bootstrap response is missing required fields.');
       }
@@ -488,6 +509,13 @@ export const ChatProvider = ({ children }) => {
       disconnect();
     }
   }, [currentUser, disconnect]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    fetchFriends().catch(() => {
+      // Friend list errors are already surfaced through context state.
+    });
+  }, [currentUser, fetchFriends]);
 
   useEffect(() => {
     if (!currentUser) return;

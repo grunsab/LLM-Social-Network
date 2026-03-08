@@ -60,6 +60,10 @@ class SpacetimeHttpClient:
                 or payload.get('detail')
                 or default_message
             )
+        elif isinstance(payload, str) and payload.strip():
+            message = payload.strip()
+        elif response.text:
+            message = response.text.strip() or default_message
         raise SpacetimeApiError(message, status_code=response.status_code, payload=payload)
 
     def _db_identifier(self):
@@ -92,8 +96,8 @@ class SpacetimeHttpClient:
         if response.status_code >= 400:
             self._handle_error(response, "Failed to create SpaceTime identity.")
         payload = self._parse_json(response) or {}
-        identity = payload.get('identity')
-        token = payload.get('token')
+        identity = payload.get('identity') if isinstance(payload, dict) else None
+        token = payload.get('token') if isinstance(payload, dict) else None
         if not identity or not token:
             raise SpacetimeApiError("SpaceTime identity response is missing identity or token.")
         return {'identity': identity, 'token': token}
@@ -107,8 +111,13 @@ class SpacetimeHttpClient:
             response = self._post('/v1/identity/websocket-token', headers=bearer_headers)
         if response.status_code >= 400:
             self._handle_error(response, "Failed to create websocket token for SpaceTime identity.")
-        payload = self._parse_json(response) or {}
-        token = payload.get('token')
+        payload = self._parse_json(response)
+        if isinstance(payload, dict):
+            token = payload.get('token')
+        elif isinstance(payload, str):
+            token = payload.strip().strip('"')
+        else:
+            token = response.text.strip().strip('"') if response.text else None
         if not token:
             raise SpacetimeApiError("SpaceTime websocket token response is missing token.")
         return token
@@ -350,6 +359,12 @@ class ChatBootstrapResource(Resource):
             abort(
                 502,
                 message=f"SpaceTime bootstrap failed: {str(err)}"
+            )
+        except Exception as err:
+            current_app.logger.exception("Unexpected chat bootstrap failure")
+            abort(
+                500,
+                message=f"Unexpected chat bootstrap error: {str(err)}"
             )
 
         ws_url = _normalize_spacetimedb_client_uri(

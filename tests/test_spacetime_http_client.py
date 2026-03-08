@@ -112,3 +112,33 @@ def test_spacetime_post_wraps_request_errors(app, monkeypatch):
             assert False, 'Expected SpacetimeApiError'
         except chat_module.SpacetimeApiError as err:
             assert 'Failed to reach SpaceTimeDB' in str(err)
+
+
+def test_create_websocket_token_accepts_json_string_payload(app, monkeypatch):
+    calls = []
+
+    def _fake_post(url, json=None, data=None, headers=None, timeout=None):
+        calls.append(headers or {})
+        return _FakeResponse(payload='ws-token-from-json-string')
+
+    monkeypatch.setattr(chat_module.requests, 'post', _fake_post)
+
+    with app.app_context():
+        client = chat_module.SpacetimeHttpClient()
+        token = client.create_websocket_token('identity-token-123')
+
+    assert token == 'ws-token-from-json-string'
+    assert calls[0]['Authorization'].startswith('Basic ')
+
+
+def test_create_websocket_token_accepts_plain_text_payload(app, monkeypatch):
+    def _fake_post(url, json=None, data=None, headers=None, timeout=None):
+        return _FakeResponse(payload=None, text='plain-text-ws-token')
+
+    monkeypatch.setattr(chat_module.requests, 'post', _fake_post)
+
+    with app.app_context():
+        client = chat_module.SpacetimeHttpClient()
+        token = client.create_websocket_token('identity-token-123')
+
+    assert token == 'plain-text-ws-token'
