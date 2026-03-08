@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ChatPage from './ChatPage';
@@ -303,6 +303,7 @@ vi.mock('../spacetimedb/module_bindings', () => ({
 
 describe('ChatPage integration', () => {
   beforeEach(() => {
+    window.innerWidth = 1280;
     mockAuthState.currentUser = {
       id: 1,
       username: 'alice',
@@ -426,5 +427,56 @@ describe('ChatPage integration', () => {
       dbName: 'socialnetworkdotsocial-48xhr',
       token: 'ws-token-123',
     });
+  });
+
+  it('uses a single-pane mobile flow with back navigation and a group sheet', async () => {
+    window.innerWidth = 390;
+
+    mockRealtime.reset({
+      my_conversations: [
+        {
+          conversationId: 'dm:1:2',
+          kind: 'dm',
+          title: 'DM: alice & bob',
+          createdByUserId: 1,
+          createdAt: '2026-03-07T11:59:00Z',
+          lastMessageAt: '2026-03-07T12:00:00Z',
+          lastMessageId: 'message-1',
+          participantUserIds: [1, 2],
+        },
+      ],
+      my_messages: [
+        {
+          messageId: 'message-1',
+          conversationId: 'dm:1:2',
+          senderUserId: 2,
+          ciphertext: 'hello from bob',
+          createdAt: '2026-03-07T12:00:00Z',
+        },
+      ],
+    });
+
+    renderChat();
+    expect(screen.getByText('Chats')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /New Group/i })).toBeEnabled();
+    });
+    await screen.findByRole('button', { name: /DM: alice & bob/i });
+    expect(screen.queryByRole('heading', { name: 'DM: alice & bob' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /New Group/i }));
+    expect(screen.getByRole('dialog', { name: 'Create Group' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Close$/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /DM: alice & bob/i }));
+
+    expect(await screen.findByRole('heading', { name: 'DM: alice & bob' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Back to chats/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Chats' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Back to chats/i }));
+
+    expect(await screen.findByRole('heading', { name: 'Chats' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'DM: alice & bob' })).not.toBeInTheDocument();
   });
 });
