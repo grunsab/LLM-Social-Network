@@ -9,6 +9,7 @@ import {
 } from 'react-router-dom';
 
 import { useAuth } from './context/AuthContext'; // Import useAuth
+import { useChat } from './context/ChatContext';
 import Login from './components/Login';
 import Register from './components/Register';
 import Dashboard from './components/Dashboard'; // Import Dashboard
@@ -21,12 +22,14 @@ import PopularAmpersoundsPage from './components/PopularAmpersoundsPage'; // Imp
 import Notifications from './components/Notifications'; // Import Notifications
 import SinglePostPage from './components/SinglePostPage'; // Import SinglePostPage
 import CreateAmpersoundFromYoutubePage from './components/pages/CreateAmpersoundFromYoutubePage'; // Import the new page
+import ChatPage from './components/ChatPage';
 import './App.css';
 import './hooks/Autocomplete.css'; // Import autocomplete styles
 import Spinner from './components/Spinner'; // Import Spinner
 
 function App() {
   const { currentUser, loading, logout } = useAuth(); // Get user and logout
+  const { totalUnread: totalChatUnread } = useChat();
   const [unreadCount, setUnreadCount] = useState(0);
   const [isNavOpen, setIsNavOpen] = useState(false); // State for mobile nav
 
@@ -95,6 +98,15 @@ function App() {
                 <NavLink to="/friend-requests" className={({ isActive }) => isActive ? "active" : ""}>Friend Requests</NavLink>
               </li>
               <li>
+                <NavLink to="/chat" className={({ isActive }) => isActive ? "active" : ""}>
+                  Chat{totalChatUnread > 0 && (
+                    <span style={{ backgroundColor: '#2563eb', color: '#fff', borderRadius: '50%', padding: '0.2rem 0.5rem', marginLeft: '0.25rem', fontSize: '0.8rem' }}>
+                      {totalChatUnread}
+                    </span>
+                  )}
+                </NavLink>
+              </li>
+              <li>
                 <NavLink to="/create-ampersound-youtube" className={({ isActive }) => isActive ? "active" : ""}>Create Ampersound (YouTube)</NavLink>
               </li>
               <li>
@@ -142,6 +154,7 @@ function App() {
              <Route path="/friend-requests" element={<FriendRequests />} />
              <Route path="/notifications" element={<Notifications />} />
              <Route path="/create-ampersound-youtube" element={<CreateAmpersoundFromYoutubePage />} /> {/* New protected route */}
+             <Route path="/chat" element={<ChatPage />} />
           </Route>
           
            {/* Optional: Catch-all route for 404 */}

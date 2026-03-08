@@ -41,6 +41,23 @@ from resources.image_remix import ImageRemixResource # Added import for image re
 from resources.ampersound import AmpersoundListResource, AmpersoundResource, MyAmpersoundsResource, AmpersoundSearchResource # Added Ampersound resources
 from resources.ampersound_youtube import AmpersoundFromYoutubeResource # New resource for YouTube to Ampersound
 from resources.admin import AdminAmpersoundApprovalList, AdminAmpersoundApprovalAction # Added Admin Ampersound resources
+from resources.chat import (
+    ChatBootstrapResource,
+    ChatDMResource,
+    ChatE2EEBootstrapResource,
+    ChatE2EEConversationDeviceBundleResource,
+    ChatE2EEDeviceLinkApproveResource,
+    ChatE2EEDeviceLinkCompleteResource,
+    ChatE2EEDeviceLinkSessionResource,
+    ChatE2EEDeviceOneTimePrekeysResource,
+    ChatE2EEDeviceRegistrationResource,
+    ChatE2EEDeviceRevokeResource,
+    ChatE2EEDeviceSignedPrekeyResource,
+    ChatE2EEUserDeviceBundleResource,
+    ChatFriendsResource,
+    ChatGroupMemberResource,
+    ChatGroupResource,
+)
 from utils import generate_s3_file_url # Import the utility function
 
 # Import for password hashing if not already globally available in this scope
@@ -75,6 +92,19 @@ class Config:
     DEEPINFRA_API_BASE = "https://api.deepinfra.com/v1/openai" # Centralize this
     DEEPINFRA_API_KEY = os.environ.get('DEEPINFRA_API_KEY') # Added DeepInfra API Key
     RUNWARE_API_KEY = os.environ.get('RUNWARE_API_KEY') # Added Runware API Key for image remixing
+
+    # SpacetimeDB chat configuration
+    SPACETIMEDB_HTTP_URL = os.environ.get('SPACETIMEDB_HTTP_URL', 'https://maincloud.spacetimedb.com')
+    SPACETIMEDB_WS_URL = os.environ.get('SPACETIMEDB_WS_URL', 'wss://maincloud.spacetimedb.com')
+    SPACETIMEDB_DB_NAME = os.environ.get('SPACETIMEDB_DB_NAME')
+    SPACETIMEDB_DB_ID = os.environ.get('SPACETIMEDB_DB_ID')
+    SPACETIMEDB_SERVICE_TOKEN = os.environ.get('SPACETIMEDB_SERVICE_TOKEN')
+    SPACETIMEDB_TOKEN_ENCRYPTION_KEY = os.environ.get('SPACETIMEDB_TOKEN_ENCRYPTION_KEY')
+    SPACETIMEDB_HTTP_TIMEOUT_SECONDS = int(os.environ.get('SPACETIMEDB_HTTP_TIMEOUT_SECONDS', '15'))
+    CHAT_E2EE_ENABLED = os.environ.get('CHAT_E2EE_ENABLED', '1') != '0'
+    CHAT_E2EE_NEW_CONVERSATIONS_ENABLED = os.environ.get('CHAT_E2EE_NEW_CONVERSATIONS_ENABLED', '0') != '0'
+    CHAT_MIN_ONE_TIME_PREKEYS = int(os.environ.get('CHAT_MIN_ONE_TIME_PREKEYS', '10'))
+    CHAT_DEVICE_LINK_TTL_MINUTES = int(os.environ.get('CHAT_DEVICE_LINK_TTL_MINUTES', '10'))
 
     @staticmethod
     def init_app(app):
@@ -385,6 +415,23 @@ def create_app(config_name='default', overrides=None): # Add overrides parameter
         api.add_resource(MyAmpersoundsResource, '/api/v1/ampersounds/my')
         api.add_resource(AmpersoundSearchResource, '/api/v1/ampersounds/search')
 
+        # Chat endpoints (SpacetimeDB-backed)
+        api.add_resource(ChatBootstrapResource, '/api/v1/chat/bootstrap')
+        api.add_resource(ChatE2EEBootstrapResource, '/api/v1/chat/e2ee/bootstrap')
+        api.add_resource(ChatE2EEDeviceRegistrationResource, '/api/v1/chat/e2ee/devices')
+        api.add_resource(ChatE2EEDeviceLinkSessionResource, '/api/v1/chat/e2ee/device-links')
+        api.add_resource(ChatE2EEDeviceLinkApproveResource, '/api/v1/chat/e2ee/device-links/<int:link_session_id>/approve')
+        api.add_resource(ChatE2EEDeviceLinkCompleteResource, '/api/v1/chat/e2ee/device-links/<int:link_session_id>/complete')
+        api.add_resource(ChatE2EEDeviceSignedPrekeyResource, '/api/v1/chat/e2ee/devices/<string:device_id>/signed-prekey')
+        api.add_resource(ChatE2EEDeviceOneTimePrekeysResource, '/api/v1/chat/e2ee/devices/<string:device_id>/one-time-prekeys')
+        api.add_resource(ChatE2EEUserDeviceBundleResource, '/api/v1/chat/e2ee/users/<int:user_id>/device-bundles')
+        api.add_resource(ChatE2EEConversationDeviceBundleResource, '/api/v1/chat/e2ee/conversations/<string:conversation_id>/device-bundles')
+        api.add_resource(ChatE2EEDeviceRevokeResource, '/api/v1/chat/e2ee/devices/<string:device_id>/revoke')
+        api.add_resource(ChatFriendsResource, '/api/v1/chat/friends')
+        api.add_resource(ChatDMResource, '/api/v1/chat/dm')
+        api.add_resource(ChatGroupResource, '/api/v1/chat/groups')
+        api.add_resource(ChatGroupMemberResource, '/api/v1/chat/groups/<string:conversation_id>/members')
+
         # Add Admin Ampersound Approval Resources
         api.add_resource(AdminAmpersoundApprovalList, '/api/v1/admin/ampersounds/pending')
         api.add_resource(AdminAmpersoundApprovalAction, '/api/v1/admin/ampersounds/<int:ampersound_id>/action')
@@ -612,4 +659,3 @@ if __name__ == '__main__':
 
     print(f"INFO: Starting Flask app with '{config_name}' configuration on {host}:{port}")
     app.run(host=host, port=port)
-
