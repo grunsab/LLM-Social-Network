@@ -484,9 +484,9 @@ const buildPayloadRows = (
   rawPayloads: Array<any> | undefined
 ) => {
   const suppliedPayloads = Array.isArray(rawPayloads) ? rawPayloads : [];
-  const payloads = suppliedPayloads.length
+  const payloads: Array<{ delivery_scope: string; recipient_user_id: bigint | undefined; recipient_device_id: string | undefined; ciphertext: string; nonce: string; aad: string; }> = suppliedPayloads.length
     ? suppliedPayloads.map(payload => ({
-        delivery_scope: normalizeOptionalString(payload.delivery_scope),
+        delivery_scope: normalizeOptionalString(payload.delivery_scope) || "",
         recipient_user_id: payload.recipient_user_id,
         recipient_device_id: normalizeOptionalString(payload.recipient_device_id),
         ciphertext: typeof payload.ciphertext === 'string' ? payload.ciphertext : '',

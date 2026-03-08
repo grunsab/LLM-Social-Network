@@ -50,6 +50,7 @@ function ChatPage() {
     e2ee,
     ensureConnected,
     refreshE2eeState,
+    registerDevice,
     createDm,
     createGroup,
     addGroupMember,
@@ -506,6 +507,17 @@ function ChatPage() {
     }
   };
 
+  const handleRegisterDevice = async () => {
+    setActionError('');
+    try {
+      await registerDevice({
+        label: candidateDeviceLabel.trim() || undefined,
+      });
+      setCandidateDeviceLabel('');
+    } catch (err) {
+      setActionError(err.message || 'Failed to register this browser.');
+    }
+  };
   const handleApproveDeviceLink = async () => {
     if (!approvalLinkSessionId.trim() || !approvalCode.trim()) {
       return;
@@ -721,7 +733,9 @@ function ChatPage() {
                       </div>
                     ) : (
                       <div className="chat-security-subpanel">
-                        <span className="chat-section-label">Link this browser</span>
+                        <span className="chat-section-label">
+                          {e2ee.hasActiveDevice ? 'Link this browser' : 'Register this browser'}
+                        </span>
                         {pendingLinkSession ? (
                           <>
                             <p className="chat-meta">
@@ -740,7 +754,9 @@ function ChatPage() {
                         ) : (
                           <>
                             <p className="chat-meta">
-                              This browser does not have local chat keys yet. Start a link request here, then approve it from an existing device.
+                              {e2ee.hasActiveDevice
+                                ? 'This browser does not have local chat keys yet. Start a link request here, then approve it from an existing device.'
+                                : 'This browser needs to be registered as your primary chat device to enable encryption features.'}
                             </p>
                             <input
                               type="text"
@@ -749,13 +765,17 @@ function ChatPage() {
                               placeholder="Browser label"
                             />
                             <div className="chat-security-actions">
-                              <button type="button" onClick={handleStartDeviceLink}>
-                                Link This Browser
+                              <button
+                                type="button"
+                                onClick={e2ee.hasActiveDevice ? handleStartDeviceLink : handleRegisterDevice}
+                              >
+                                {e2ee.hasActiveDevice ? 'Link This Browser' : 'Register This Browser'}
                               </button>
                             </div>
                           </>
                         )}
                       </div>
+
                     )}
                   </>
                 ) : (

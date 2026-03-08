@@ -775,7 +775,17 @@ export const ChatProvider = ({ children }) => {
     return result;
   }, [applyE2eeResult, refreshFromCache, syncPendingLinkSessions]);
 
+  const registerDevice = useCallback(async (options = {}) => {
+    const result = await cryptoClientRef.current.registerFirstDevice(e2eeStateRef.current.bootstrap, options);
+    await refreshE2eeState({
+      currentDeviceId: result.localRecord.deviceId,
+      localDevice: result.localRecord,
+    });
+    return result;
+  }, [refreshE2eeState]);
+
   const rotateSignedPrekey = useCallback(async () => {
+
     const localDevice = e2eeStateRef.current.localDevice;
     if (!localDevice) {
       throw new Error('No local chat device is available for signed-prekey rotation.');
@@ -930,6 +940,7 @@ export const ChatProvider = ({ children }) => {
     disconnect,
     refreshFromCache: () => refreshFromCache(connectionRef.current),
     refreshE2eeState,
+    registerDevice,
     createDm,
     createGroup,
     addGroupMember,
@@ -964,6 +975,7 @@ export const ChatProvider = ({ children }) => {
     disconnect,
     refreshFromCache,
     refreshE2eeState,
+    registerDevice,
     createDm,
     createGroup,
     addGroupMember,
