@@ -29,9 +29,16 @@ chat_device_link_session_status_enum = sa.Enum(
 
 def upgrade():
     bind = op.get_bind()
-    chat_device_kind_enum.create(bind, checkfirst=True)
-    chat_device_status_enum.create(bind, checkfirst=True)
-    chat_device_link_session_status_enum.create(bind, checkfirst=True)
+    # Explicitly check for PostgreSQL enums to avoid DuplicateObject errors
+    if bind.dialect.name == 'postgresql':
+        for enum_obj in [chat_device_kind_enum, chat_device_status_enum, chat_device_link_session_status_enum]:
+            res = bind.execute(sa.text("SELECT 1 FROM pg_type WHERE typname = :name"), {"name": enum_obj.name}).fetchone()
+            if not res:
+                enum_obj.create(bind)
+    else:
+        chat_device_kind_enum.create(bind, checkfirst=True)
+        chat_device_status_enum.create(bind, checkfirst=True)
+        chat_device_link_session_status_enum.create(bind, checkfirst=True)
 
     op.create_table(
         'chat_device',
@@ -39,8 +46,8 @@ def upgrade():
         sa.Column('user_id', sa.Integer(), nullable=False),
         sa.Column('device_id', sa.String(length=36), nullable=False),
         sa.Column('label', sa.String(length=120), nullable=True),
-        sa.Column('device_kind', chat_device_kind_enum, nullable=False),
-        sa.Column('status', chat_device_status_enum, nullable=False),
+        sa.Column('device_kind', sa.Enum('PRIMARY', 'LINKED', name='chatdevicekind', inherit_schema=True), nullable=False),
+        sa.Column('status', sa.Enum('PENDING_LINK', 'ACTIVE', 'REVOKED', name='chatdevicestatus', inherit_schema=True), nullable=False),
         sa.Column('identity_key_public', sa.Text(), nullable=False),
         sa.Column('signing_key_public', sa.Text(), nullable=False),
         sa.Column('signed_prekey_id', sa.Integer(), nullable=False),
@@ -57,6 +64,9 @@ def upgrade():
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('user_id', 'device_id', name='uq_chat_device_user_device')
     )
+    # ... rest of the tables
+    # Note: I'll use the local enum instances in create_table to avoid conflict
+    # Actually I should probably just use the names or be very careful.
     op.create_index('ix_chat_device_device_id', 'chat_device', ['device_id'], unique=True)
     op.create_index('ix_chat_device_status', 'chat_device', ['status'], unique=False)
     op.create_index('ix_chat_device_user_id', 'chat_device', ['user_id'], unique=False)
@@ -117,7 +127,7 @@ def upgrade():
         sa.Column('pending_signed_prekey_id', sa.Integer(), nullable=False),
         sa.Column('pending_signed_prekey_public', sa.Text(), nullable=False),
         sa.Column('pending_signed_prekey_signature', sa.Text(), nullable=False),
-        sa.Column('status', chat_device_link_session_status_enum, nullable=False),
+        sa.Column('status', sa.Enum('PENDING', 'APPROVED', 'EXPIRED', 'CONSUMED', name='chatdevicelinksessionstatus', inherit_schema=True), nullable=False),
         sa.Column('approval_code_hash', sa.String(length=255), nullable=False),
         sa.Column('approved_by_device_id', sa.String(length=36), nullable=True),
         sa.Column('expires_at', sa.DateTime(), nullable=False),
