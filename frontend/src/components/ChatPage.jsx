@@ -538,7 +538,7 @@ function ChatPage() {
                         onClick={() => setMobilePane('list')}
                         aria-label="Back to chats"
                       >
-                        Back
+                        <span aria-hidden="true">←</span>
                       </button>
                     )}
                     <span className="chat-avatar chat-thread-avatar">
@@ -547,13 +547,13 @@ function ChatPage() {
                     <div className="chat-thread-copy">
                       <h2>{activeConversation.title || activeConversation.conversationId}</h2>
                       <p>{activeConversationSubtitle}</p>
+                      {activeConversationStatus && (
+                        <span className="chat-thread-status">{activeConversationStatus}</span>
+                      )}
                     </div>
                   </div>
 
                   <div className="chat-thread-actions">
-                    {activeConversationStatus && (
-                      <span className="chat-thread-status">{activeConversationStatus}</span>
-                    )}
                     {activeConversation.kind === 'group' && availableGroupAdditions.length > 0 && (
                       <button
                         type="button"
