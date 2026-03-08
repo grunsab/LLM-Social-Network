@@ -262,6 +262,22 @@ def _decrypt_token(token_encrypted):
         abort(500, message="Stored SpaceTime token could not be decrypted.")
 
 
+def _normalize_identity_hex(identity_value):
+    if not isinstance(identity_value, str) or not identity_value.strip():
+        raise SpacetimeApiError("SpaceTime identity is missing or invalid.")
+
+    normalized = identity_value.strip()
+    if not normalized.startswith('0x'):
+        normalized = f"0x{normalized}"
+    return normalized
+
+
+def _identity_http_arg(identity_value):
+    return {
+        '__identity__': _normalize_identity_hex(identity_value),
+    }
+
+
 def _get_or_create_identity_mapping(user, spacetime_client):
     mapping = ChatIdentityMapping.query.filter_by(user_id=user.id).first()
     if mapping:
@@ -285,7 +301,7 @@ def _ensure_registered_identity(user, spacetime_client):
         'register_user_identity',
         [
             int(user.id),
-            mapping.spacetimedb_identity,
+            _identity_http_arg(mapping.spacetimedb_identity),
         ]
     )
     return mapping, token

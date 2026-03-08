@@ -56,6 +56,15 @@ def test_spacetime_call_reducer_posts_argument_array(app, monkeypatch):
     assert captured['headers']['Authorization'] == 'Bearer test-service-token'
 
 
+def test_identity_http_arg_normalizes_hex_prefix():
+    assert chat_module._identity_http_arg('abcdef') == {
+        '__identity__': '0xabcdef',
+    }
+    assert chat_module._identity_http_arg('0xabcdef') == {
+        '__identity__': '0xabcdef',
+    }
+
+
 def test_spacetime_run_sql_posts_plain_text_and_normalizes_rows(app, monkeypatch):
     captured = {}
 

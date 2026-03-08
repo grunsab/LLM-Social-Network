@@ -243,6 +243,7 @@ def test_group_create_success_registers_members_and_calls_reducer(client, monkey
     create_group_calls = [entry for entry in reducer_calls if entry[0] == 'create_group']
 
     assert len(register_calls) == 3
+    assert all(call[1][1]['__identity__'].startswith('0x') for call in register_calls)
     assert len(create_group_calls) == 1
     assert create_group_calls[0][1][2] == user_a_id
     assert create_group_calls[0][1][3] == sorted([user_a_id, user_b_id, user_c_id])
