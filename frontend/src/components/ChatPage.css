@@ -1,5 +1,5 @@
 .chat-page {
-  --chat-shell-height: 42rem;
+  --chat-shell-height: min(88vh, 48rem);
   display: grid;
   gap: 1rem;
 }
@@ -21,6 +21,7 @@
 .chat-sidebar {
   display: flex;
   flex-direction: column;
+  height: var(--chat-shell-height);
   max-height: var(--chat-shell-height);
 }
 
@@ -31,6 +32,7 @@
   min-height: 0;
   height: 100%;
   padding: 1rem;
+  overflow-y: auto;
 }
 
 .chat-sidebar-header {
