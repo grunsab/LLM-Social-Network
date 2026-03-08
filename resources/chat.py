@@ -577,7 +577,7 @@ def _store_one_time_prekeys(chat_device, prekeys):
 
 
 def _generate_approval_code():
-    return secrets.token_hex(4).upper()
+    return secrets.token_hex(6).upper()
 
 
 def _ensure_pending_link_session(link_session):
