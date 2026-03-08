@@ -747,22 +747,27 @@ def _get_conversation_member_ids(spacetime_client, conversation_id):
 class ChatBootstrapResource(Resource):
     @login_required
     def get(self):
+        current_app.logger.info(f"Chat bootstrap started for user {current_user.id}")
         client = SpacetimeHttpClient()
         current_chat_device = _current_chat_device(auto_select=True)
         try:
+            current_app.logger.info(f"Ensuring registered identity for user {current_user.id}, device {current_chat_device.device_id if current_chat_device else 'None'}")
             mapping, identity_token, _transport_device_id = _ensure_registered_identity(
                 current_user,
                 client,
                 chat_device=current_chat_device,
             )
+            current_app.logger.info(f"Identity ensured, creating websocket token for user {current_user.id}")
             websocket_token = client.create_websocket_token(identity_token)
+            current_app.logger.info(f"Websocket token created for user {current_user.id}")
         except SpacetimeApiError as err:
+            current_app.logger.error(f"SpaceTime bootstrap failed for user {current_user.id}: {str(err)}")
             abort(
-                502,
+                500,
                 message=f"SpaceTime bootstrap failed: {str(err)}"
             )
         except Exception as err:
-            current_app.logger.exception("Unexpected chat bootstrap failure")
+            current_app.logger.exception(f"Unexpected chat bootstrap failure for user {current_user.id}")
             abort(
                 500,
                 message=f"Unexpected chat bootstrap error: {str(err)}"
@@ -848,7 +853,7 @@ class ChatE2EEDeviceRegistrationResource(Resource):
             db.session.commit()
         except SpacetimeApiError as err:
             db.session.rollback()
-            abort(502, message=f"Failed to provision chat device transport identity: {str(err)}")
+            abort(500, message=f"Failed to provision chat device transport identity: {str(err)}")
 
         session[_chat_device_session_key()] = chat_device.device_id
         return {
@@ -959,7 +964,7 @@ class ChatE2EEDeviceLinkApproveResource(Resource):
             )
         except SpacetimeApiError as err:
             db.session.rollback()
-            abort(502, message=f"Failed to provision chat device transport identity: {str(err)}")
+            abort(500, message=f"Failed to provision chat device transport identity: {str(err)}")
 
         link_session.status = ChatDeviceLinkSessionStatus.APPROVED
         link_session.approved_by_device_id = approver_device.device_id
@@ -1091,7 +1096,7 @@ class ChatE2EEConversationDeviceBundleResource(Resource):
                 abort(404, message="Conversation was not found.")
             member_ids = _get_conversation_member_ids(client, conversation_id)
         except SpacetimeApiError as err:
-            abort(502, message=f"Failed to load conversation device bundles: {str(err)}")
+            abort(500, message=f"Failed to load conversation device bundles: {str(err)}")
 
         if int(current_user.id) not in member_ids:
             abort(403, message="You are not a member of this conversation.")
@@ -1155,7 +1160,7 @@ class ChatE2EEDeviceRevokeResource(Resource):
             db.session.commit()
         except SpacetimeApiError as err:
             db.session.rollback()
-            abort(502, message=f"Failed to emit device revocation event: {str(err)}")
+            abort(500, message=f"Failed to emit device revocation event: {str(err)}")
 
         return {
             'device_id': target_device.device_id,
@@ -1215,7 +1220,7 @@ class ChatDMResource(Resource):
                 ]
             )
         except SpacetimeApiError as err:
-            abort(502, message=f"Failed to create or fetch DM conversation: {str(err)}")
+            abort(500, message=f"Failed to create or fetch DM conversation: {str(err)}")
 
         return {
             'conversation_id': conversation_id,
@@ -1262,7 +1267,7 @@ class ChatGroupResource(Resource):
                 ]
             )
         except SpacetimeApiError as err:
-            abort(502, message=f"Failed to create group conversation: {str(err)}")
+            abort(500, message=f"Failed to create group conversation: {str(err)}")
 
         return {
             'conversation_id': conversation_id,
@@ -1316,7 +1321,7 @@ class ChatGroupMemberResource(Resource):
                 ]
             )
         except SpacetimeApiError as err:
-            abort(502, message=f"Failed to add group member: {str(err)}")
+            abort(500, message=f"Failed to add group member: {str(err)}")
 
         return {
             'conversation_id': conversation_id,
