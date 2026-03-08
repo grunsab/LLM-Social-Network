@@ -1,9 +1,13 @@
 {
+  "private": true,
   "cacheDirectories": [
     "frontend/node_modules"
   ],
+  "engines": {
+    "node": "24.x",
+    "npm": "11.x"
+  },
   "scripts": {
-    "heroku-postbuild": "cd frontend && npm install && npm run build"
+    "heroku-postbuild": "cd frontend && npm ci --include=dev && npm run build"
   }
 }
-

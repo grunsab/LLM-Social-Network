@@ -26,6 +26,13 @@ share/python-wheels/
 *.egg
 MANIFEST
 spacetimedb/
+!spacetimedb/
+!spacetimedb/spacetimedb/
+!spacetimedb/spacetimedb/src/
+!spacetimedb/spacetimedb/src/**
+!frontend/src/spacetimedb/
+!frontend/src/spacetimedb/module_bindings/
+!frontend/src/spacetimedb/module_bindings/**
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
