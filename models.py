@@ -192,6 +192,21 @@ class User(UserMixin, db.Model):
         """Returns a list of pending friend requests received by this user."""
         return FriendRequest.query.filter_by(receiver_id=self.id, status=FriendRequestStatus.PENDING).order_by(FriendRequest.timestamp.desc()).all()
 
+class ChatIdentityMapping(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True, index=True)
+    spacetimedb_identity = db.Column(db.String(66), nullable=False, unique=True, index=True)
+    token_encrypted = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+
+    user = db.relationship('User', backref=db.backref('chat_identity_mapping', uselist=False, lazy=True))
+
 class Comment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.Text, nullable=False)

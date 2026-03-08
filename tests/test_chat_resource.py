@@ -1,0 +1,279 @@
+import uuid
+
+import resources.chat as chat_module
+
+from models import ChatIdentityMapping
+
+
+def _register_user(client, username, email, password='p'):
+    response = client.post(
+        '/api/v1/register',
+        json={
+            'username': username,
+            'email': email,
+            'password': password,
+        }
+    )
+    assert response.status_code == 201, response.get_json()
+    return response.get_json()['user_id']
+
+
+def _login_user(client, identifier, password='p'):
+    response = client.post(
+        '/api/v1/login',
+        json={
+            'identifier': identifier,
+            'password': password,
+        }
+    )
+    assert response.status_code == 200, response.get_json()
+    return response.get_json()['user']['id']
+
+
+def _logout_user(client):
+    client.post('/api/v1/logout')
+
+
+def _befriend(client, sender_identifier, receiver_identifier, receiver_id):
+    _login_user(client, sender_identifier)
+    send_response = client.post('/api/v1/friend-requests', json={'user_id': receiver_id})
+    assert send_response.status_code == 201, send_response.get_json()
+    request_id = send_response.get_json()['id']
+    _logout_user(client)
+
+    _login_user(client, receiver_identifier)
+    accept_response = client.put(
+        f'/api/v1/friend-requests/{request_id}',
+        json={'action': 'accept'}
+    )
+    assert accept_response.status_code == 200, accept_response.get_json()
+    _logout_user(client)
+
+
+def _mock_spacetime(monkeypatch, sql_results_by_match=None):
+    call_log = {
+        'calls': [],
+        'created_identities': [],
+    }
+
+    def _create_identity(_self):
+        token_suffix = uuid.uuid4().hex
+        created = {
+            'identity': f"0x{token_suffix.rjust(64, '0')}",
+            'token': f"identity-token-{token_suffix}",
+        }
+        call_log['created_identities'].append(created)
+        return created
+
+    def _create_websocket_token(_self, identity_token):
+        return f"ws-{identity_token}"
+
+    def _call_reducer(_self, reducer_name, args):
+        call_log['calls'].append((reducer_name, args))
+        return {'ok': True}
+
+    def _run_sql(_self, query):
+        call_log['calls'].append(('sql', query))
+        if sql_results_by_match:
+            for match_text, rows in sql_results_by_match.items():
+                if match_text in query:
+                    return rows
+        return []
+
+    monkeypatch.setattr(chat_module.SpacetimeHttpClient, 'create_identity', _create_identity)
+    monkeypatch.setattr(chat_module.SpacetimeHttpClient, 'create_websocket_token', _create_websocket_token)
+    monkeypatch.setattr(chat_module.SpacetimeHttpClient, 'call_reducer', _call_reducer)
+    monkeypatch.setattr(chat_module.SpacetimeHttpClient, 'run_sql', _run_sql)
+    return call_log
+
+
+def test_chat_bootstrap_requires_auth(client):
+    response = client.get('/api/v1/chat/bootstrap')
+    assert response.status_code == 401
+
+
+def test_chat_bootstrap_success_creates_identity_mapping(client, monkeypatch):
+    _mock_spacetime(monkeypatch)
+    _register_user(client, 'chat_bootstrap_user', 'chat_bootstrap_user@example.com')
+    user_id = _login_user(client, 'chat_bootstrap_user')
+
+    response = client.get('/api/v1/chat/bootstrap')
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['user_id'] == user_id
+    assert payload['db_name'] == 'socialnetworkdotsocial-48xhr'
+    assert payload['websocket_token'].startswith('ws-identity-token-')
+    assert payload['identity'].startswith('0x')
+
+    with client.application.app_context():
+        mapping = ChatIdentityMapping.query.filter_by(user_id=user_id).first()
+        assert mapping is not None
+        assert mapping.spacetimedb_identity == payload['identity']
+        assert mapping.token_encrypted != f"identity-token-{user_id}"
+
+
+def test_chat_bootstrap_reuses_existing_identity_mapping(client, monkeypatch):
+    call_log = _mock_spacetime(monkeypatch)
+    _register_user(client, 'chat_bootstrap_repeat', 'chat_bootstrap_repeat@example.com')
+    _login_user(client, 'chat_bootstrap_repeat')
+
+    first_response = client.get('/api/v1/chat/bootstrap')
+    second_response = client.get('/api/v1/chat/bootstrap')
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert first_response.get_json()['identity'] == second_response.get_json()['identity']
+    assert len(call_log['created_identities']) == 1
+
+
+def test_chat_dm_requires_friendship(client, monkeypatch):
+    _mock_spacetime(monkeypatch)
+    _register_user(client, 'chat_dm_sender', 'chat_dm_sender@example.com')
+    target_id = _register_user(client, 'chat_dm_target', 'chat_dm_target@example.com')
+    _login_user(client, 'chat_dm_sender')
+
+    response = client.post('/api/v1/chat/dm', json={'user_id': target_id})
+    assert response.status_code == 403
+    assert 'accepted friends' in response.get_json()['message']
+
+
+def test_chat_dm_success_for_friends(client, monkeypatch):
+    _mock_spacetime(monkeypatch)
+    user_a_id = _register_user(client, 'chat_dm_friend_a', 'chat_dm_friend_a@example.com')
+    user_b_id = _register_user(client, 'chat_dm_friend_b', 'chat_dm_friend_b@example.com')
+    _befriend(client, 'chat_dm_friend_a', 'chat_dm_friend_b', user_b_id)
+
+    _login_user(client, 'chat_dm_friend_a')
+    response = client.post('/api/v1/chat/dm', json={'user_id': user_b_id})
+    assert response.status_code == 200
+
+    payload = response.get_json()
+    low, high = sorted((user_a_id, user_b_id))
+    assert payload['conversation_id'] == f'dm:{low}:{high}'
+    assert payload['kind'] == 'dm'
+
+
+def test_group_create_requires_mutual_friendships(client, monkeypatch):
+    _mock_spacetime(monkeypatch)
+    user_a_id = _register_user(client, 'chat_group_a', 'chat_group_a@example.com')
+    user_b_id = _register_user(client, 'chat_group_b', 'chat_group_b@example.com')
+    user_c_id = _register_user(client, 'chat_group_c', 'chat_group_c@example.com')
+
+    _befriend(client, 'chat_group_a', 'chat_group_b', user_b_id)
+    _befriend(client, 'chat_group_a', 'chat_group_c', user_c_id)
+
+    _login_user(client, 'chat_group_a')
+    response = client.post(
+        '/api/v1/chat/groups',
+        json={
+            'title': 'Mutual group',
+            'member_user_ids': [user_b_id, user_c_id],
+        }
+    )
+    assert response.status_code == 403
+    assert 'not accepted friends' in response.get_json()['message']
+
+
+def test_chat_friends_returns_only_accepted_friends_sorted(client, monkeypatch):
+    _mock_spacetime(monkeypatch)
+    _register_user(client, 'chat_friends_owner', 'chat_friends_owner@example.com')
+    friend_zed_id = _register_user(client, 'zed_friend', 'zed_friend@example.com')
+    friend_amy_id = _register_user(client, 'amy_friend', 'amy_friend@example.com')
+    pending_id = _register_user(client, 'pending_friend', 'pending_friend@example.com')
+
+    _befriend(client, 'chat_friends_owner', 'zed_friend', friend_zed_id)
+    _befriend(client, 'chat_friends_owner', 'amy_friend', friend_amy_id)
+
+    _login_user(client, 'chat_friends_owner')
+    pending_response = client.post('/api/v1/friend-requests', json={'user_id': pending_id})
+    assert pending_response.status_code == 201, pending_response.get_json()
+
+    response = client.get('/api/v1/chat/friends')
+    assert response.status_code == 200
+
+    payload = response.get_json()
+    assert [row['username'] for row in payload] == ['amy_friend', 'zed_friend']
+
+
+def test_group_create_success_registers_members_and_calls_reducer(client, monkeypatch):
+    call_log = _mock_spacetime(monkeypatch)
+    user_a_id = _register_user(client, 'chat_group_success_a', 'chat_group_success_a@example.com')
+    user_b_id = _register_user(client, 'chat_group_success_b', 'chat_group_success_b@example.com')
+    user_c_id = _register_user(client, 'chat_group_success_c', 'chat_group_success_c@example.com')
+
+    _befriend(client, 'chat_group_success_a', 'chat_group_success_b', user_b_id)
+    _befriend(client, 'chat_group_success_a', 'chat_group_success_c', user_c_id)
+    _befriend(client, 'chat_group_success_b', 'chat_group_success_c', user_c_id)
+
+    _login_user(client, 'chat_group_success_a')
+    response = client.post(
+        '/api/v1/chat/groups',
+        json={
+            'title': 'Triplet',
+            'member_user_ids': [user_b_id, user_c_id],
+        }
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload['kind'] == 'group'
+    assert payload['member_user_ids'] == sorted([user_a_id, user_b_id, user_c_id])
+    assert payload['conversation_id'].startswith('grp:')
+
+    reducer_calls = [entry for entry in call_log['calls'] if entry[0] != 'sql']
+    register_calls = [entry for entry in reducer_calls if entry[0] == 'register_user_identity']
+    create_group_calls = [entry for entry in reducer_calls if entry[0] == 'create_group']
+
+    assert len(register_calls) == 3
+    assert len(create_group_calls) == 1
+    assert create_group_calls[0][1]['creator_user_id'] == user_a_id
+    assert create_group_calls[0][1]['member_user_ids'] == sorted([user_a_id, user_b_id, user_c_id])
+
+
+def test_group_member_add_success_requires_existing_membership(client, monkeypatch):
+    user_a_id = _register_user(client, 'chat_group_add_a', 'chat_group_add_a@example.com')
+    user_b_id = _register_user(client, 'chat_group_add_b', 'chat_group_add_b@example.com')
+    user_c_id = _register_user(client, 'chat_group_add_c', 'chat_group_add_c@example.com')
+
+    _befriend(client, 'chat_group_add_a', 'chat_group_add_b', user_b_id)
+    _befriend(client, 'chat_group_add_a', 'chat_group_add_c', user_c_id)
+    _befriend(client, 'chat_group_add_b', 'chat_group_add_c', user_c_id)
+
+    call_log = _mock_spacetime(
+        monkeypatch,
+        sql_results_by_match={
+            "FROM conversation WHERE conversation_id = 'grp:test-room'": [
+                {
+                    'conversation_id': 'grp:test-room',
+                    'kind': 'group',
+                    'title': 'Test Room',
+                }
+            ],
+            "FROM conversation_member WHERE conversation_id = 'grp:test-room'": [
+                {'user_id': user_a_id},
+                {'user_id': user_b_id},
+            ],
+        }
+    )
+
+    _login_user(client, 'chat_group_add_a')
+    response = client.post(
+        '/api/v1/chat/groups/grp:test-room/members',
+        json={'user_id': user_c_id}
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload['conversation_id'] == 'grp:test-room'
+    assert payload['user_id'] == user_c_id
+
+    add_member_calls = [entry for entry in call_log['calls'] if entry[0] == 'add_group_member']
+    assert add_member_calls == [
+        (
+            'add_group_member',
+            {
+                'conversation_id': 'grp:test-room',
+                'user_id': user_c_id,
+            }
+        )
+    ]
