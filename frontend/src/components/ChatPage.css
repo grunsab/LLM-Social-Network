@@ -1,20 +1,22 @@
 .chat-page {
   display: grid;
-  grid-template-columns: minmax(280px, 340px) 1fr;
+  grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
+  min-height: calc(100vh - 9rem);
+  max-height: calc(100vh - 9rem);
+  overflow: hidden;
 }
 
 .chat-sidebar,
 .chat-thread,
 .chat-action-error {
   padding: 1rem;
+  min-height: 0;
 }
 
 .chat-sidebar {
-  position: sticky;
-  top: 1rem;
-  max-height: calc(100vh - 4rem);
+  height: 100%;
   overflow: auto;
 }
 
@@ -145,6 +147,7 @@
 .chat-list {
   display: grid;
   gap: 0.5rem;
+  padding-bottom: 0.2rem;
 }
 
 .chat-list-item {
@@ -189,10 +192,12 @@
 }
 
 .chat-thread {
-  min-height: 70vh;
   display: grid;
   grid-template-rows: auto 1fr auto auto;
   gap: 0.75rem;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .chat-empty-state {
@@ -228,6 +233,9 @@
   justify-content: flex-start;
   gap: 0.6rem;
   background: #f8fafc;
+  min-height: 0;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
 }
 
 .chat-message {
@@ -280,6 +288,8 @@
 .chat-composer {
   display: flex;
   gap: 0.5rem;
+  align-items: flex-end;
+  padding-top: 0.1rem;
 }
 
 .chat-composer input {
@@ -293,14 +303,19 @@
 @media (max-width: 980px) {
   .chat-page {
     grid-template-columns: 1fr;
+    min-height: auto;
+    max-height: none;
+    overflow: visible;
   }
 
   .chat-sidebar {
     position: static;
+    height: auto;
     max-height: none;
   }
 
   .chat-thread {
     min-height: 60vh;
+    height: auto;
   }
 }

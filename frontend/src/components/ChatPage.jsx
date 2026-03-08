@@ -48,6 +48,8 @@ function ChatPage() {
   const [draftAddMemberId, setDraftAddMemberId] = useState('');
 
   const typingTimeoutRef = useRef(null);
+  const messagesViewportRef = useRef(null);
+  const previousConversationRef = useRef(null);
 
   useEffect(() => {
     ensureConnected().catch(() => {
@@ -121,6 +123,29 @@ function ChatPage() {
       setActionError(err.message || 'Failed to update read state.');
     });
   }, [activeConversationId, activeMessages, markRead]);
+
+  useEffect(() => {
+    const viewport = messagesViewportRef.current;
+    if (!viewport) {
+      previousConversationRef.current = activeConversationId;
+      return;
+    }
+
+    const conversationChanged = previousConversationRef.current !== activeConversationId;
+    const isNearBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 96;
+    if (conversationChanged || isNearBottom) {
+      if (typeof viewport.scrollTo === 'function') {
+        viewport.scrollTo({
+          top: viewport.scrollHeight,
+          behavior: conversationChanged ? 'auto' : 'smooth',
+        });
+      } else {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    }
+
+    previousConversationRef.current = activeConversationId;
+  }, [activeConversationId, activeMessages]);
 
   const handleDraftChange = async (event) => {
     const nextValue = event.target.value;
@@ -353,7 +378,12 @@ function ChatPage() {
               )}
             </header>
 
-            <div className="chat-messages" role="log" aria-live="polite">
+            <div
+              ref={messagesViewportRef}
+              className="chat-messages"
+              role="log"
+              aria-live="polite"
+            >
               {activeMessages.length === 0 ? (
                 <p className="chat-meta">No messages yet. Send the first encrypted payload.</p>
               ) : (
