@@ -45,3 +45,7 @@ The application learns user interests based on the categories of their posts and
 ## Database
 
 The application uses SQLite by default (`social_network.db`). The database schema is created automatically when `app.py` is first run.
+
+## License
+
+This project is distributed under the GNU Affero General Public License v3.0. See `LICENSE` for the full license text.
