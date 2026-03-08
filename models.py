@@ -47,6 +47,24 @@ class CommentVisibility(enum.Enum):
     PUBLIC = 'public'
     FRIENDS_ONLY = 'friends_only'
 
+# Enum for chat device kind
+class ChatDeviceKind(enum.Enum):
+    PRIMARY = 'primary'
+    LINKED = 'linked'
+
+# Enum for chat device status
+class ChatDeviceStatus(enum.Enum):
+    PENDING_LINK = 'pending_link'
+    ACTIVE = 'active'
+    REVOKED = 'revoked'
+
+# Enum for chat device link session status
+class ChatDeviceLinkSessionStatus(enum.Enum):
+    PENDING = 'pending'
+    APPROVED = 'approved'
+    EXPIRED = 'expired'
+    CONSUMED = 'consumed'
+
 # New FriendRequest model
 class FriendRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -191,6 +209,145 @@ class User(UserMixin, db.Model):
     def get_pending_received_requests(self):
         """Returns a list of pending friend requests received by this user."""
         return FriendRequest.query.filter_by(receiver_id=self.id, status=FriendRequestStatus.PENDING).order_by(FriendRequest.timestamp.desc()).all()
+
+class ChatIdentityMapping(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True, index=True)
+    spacetimedb_identity = db.Column(db.String(66), nullable=False, unique=True, index=True)
+    token_encrypted = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+
+    user = db.relationship('User', backref=db.backref('chat_identity_mapping', uselist=False, lazy=True))
+
+
+class ChatDevice(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    device_id = db.Column(db.String(36), nullable=False, unique=True, index=True)
+    label = db.Column(db.String(120), nullable=True)
+    device_kind = db.Column(db.Enum(ChatDeviceKind), default=ChatDeviceKind.PRIMARY, nullable=False)
+    status = db.Column(db.Enum(ChatDeviceStatus), default=ChatDeviceStatus.PENDING_LINK, nullable=False, index=True)
+    identity_key_public = db.Column(db.Text, nullable=False)
+    signing_key_public = db.Column(db.Text, nullable=False)
+    signed_prekey_id = db.Column(db.Integer, nullable=False)
+    signed_prekey_public = db.Column(db.Text, nullable=False)
+    signed_prekey_signature = db.Column(db.Text, nullable=False)
+    linked_at = db.Column(db.DateTime, nullable=True)
+    last_seen_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    approved_by_device_id = db.Column(db.String(36), db.ForeignKey('chat_device.device_id'), nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'device_id', name='uq_chat_device_user_device'),
+    )
+
+    user = db.relationship('User', backref=db.backref('chat_devices', lazy=True))
+    approved_by_device = db.relationship(
+        'ChatDevice',
+        foreign_keys=[approved_by_device_id],
+        remote_side=[device_id],
+        backref=db.backref('approved_linked_devices', lazy=True),
+        lazy=True,
+    )
+
+    def __repr__(self):
+        return f'<ChatDevice {self.device_id} user={self.user_id} status={self.status.value}>'
+
+
+class ChatOneTimePrekey(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    chat_device_id = db.Column(db.Integer, db.ForeignKey('chat_device.id'), nullable=False, index=True)
+    prekey_id = db.Column(db.Integer, nullable=False)
+    public_key = db.Column(db.Text, nullable=False)
+    claimed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('chat_device_id', 'prekey_id', name='uq_chat_one_time_prekey_device_prekey'),
+    )
+
+    chat_device = db.relationship(
+        'ChatDevice',
+        backref=db.backref('one_time_prekeys', lazy=True, cascade='all, delete-orphan')
+    )
+
+    def __repr__(self):
+        return f'<ChatOneTimePrekey device={self.chat_device_id} prekey={self.prekey_id}>'
+
+
+class ChatTransportIdentityMapping(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    chat_device_id = db.Column(db.Integer, db.ForeignKey('chat_device.id'), nullable=False, unique=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    spacetimedb_identity = db.Column(db.String(66), nullable=False, unique=True, index=True)
+    token_encrypted = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+
+    chat_device = db.relationship(
+        'ChatDevice',
+        backref=db.backref('transport_identity_mapping', uselist=False, lazy=True)
+    )
+    user = db.relationship('User', backref=db.backref('chat_transport_identity_mappings', lazy=True))
+
+    def __repr__(self):
+        return f'<ChatTransportIdentityMapping device={self.chat_device_id} user={self.user_id}>'
+
+
+class ChatDeviceLinkSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    pending_device_id = db.Column(db.String(36), nullable=False, index=True)
+    pending_identity_key_public = db.Column(db.Text, nullable=False)
+    pending_signing_key_public = db.Column(db.Text, nullable=False)
+    pending_signed_prekey_id = db.Column(db.Integer, nullable=False)
+    pending_signed_prekey_public = db.Column(db.Text, nullable=False)
+    pending_signed_prekey_signature = db.Column(db.Text, nullable=False)
+    status = db.Column(
+        db.Enum(ChatDeviceLinkSessionStatus),
+        default=ChatDeviceLinkSessionStatus.PENDING,
+        nullable=False,
+        index=True
+    )
+    approval_code_hash = db.Column(db.String(255), nullable=False)
+    approved_by_device_id = db.Column(db.String(36), db.ForeignKey('chat_device.device_id'), nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+
+    user = db.relationship('User', backref=db.backref('chat_device_link_sessions', lazy=True))
+    approved_by_device = db.relationship(
+        'ChatDevice',
+        foreign_keys=[approved_by_device_id],
+        backref=db.backref('approved_link_sessions', lazy=True),
+        lazy=True,
+    )
+
+    def __repr__(self):
+        return f'<ChatDeviceLinkSession pending_device={self.pending_device_id} status={self.status.value}>'
 
 class Comment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
