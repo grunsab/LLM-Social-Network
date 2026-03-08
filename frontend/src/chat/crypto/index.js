@@ -63,11 +63,11 @@ export const createChatCryptoClient = ({
         fetchImpl,
         store,
         prekeyService: getPrekeyService(),
+        resolvePreferredDeviceId: () => getDeviceManager().resolvePreferredDeviceId(),
       });
     }
     return deviceLinkManager;
   };
-
   const getDirectMessageService = () => {
     if (!directMessageService) {
       directMessageService = createDirectMessageService({

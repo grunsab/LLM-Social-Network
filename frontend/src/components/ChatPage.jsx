@@ -519,13 +519,14 @@ function ChatPage() {
     }
   };
   const handleApproveDeviceLink = async () => {
-    if (!approvalLinkSessionId.trim() || !approvalCode.trim()) {
+    const sanitizedSessionId = approvalLinkSessionId.replace(/\D/g, '');
+    if (!sanitizedSessionId || !approvalCode.trim()) {
       return;
     }
     setActionError('');
     try {
       await approveDeviceLink({
-        linkSessionId: Number(approvalLinkSessionId),
+        linkSessionId: Number(sanitizedSessionId),
         approvalCode: approvalCode.trim(),
       });
       setApprovalLinkSessionId('');
@@ -534,7 +535,6 @@ function ChatPage() {
       setActionError(err.message || 'Failed to approve the linked browser.');
     }
   };
-
   const handleCompleteDeviceLink = async () => {
     if (!pendingLinkSession?.linkSessionId) {
       return;

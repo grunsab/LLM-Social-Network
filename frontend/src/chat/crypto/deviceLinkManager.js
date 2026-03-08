@@ -2,6 +2,7 @@ export const createDeviceLinkManager = ({
   fetchImpl = globalThis.fetch,
   store,
   prekeyService,
+  resolvePreferredDeviceId,
 } = {}) => {
   const parseResponsePayload = async (response) => {
     const rawText = typeof response.text === 'function' ? await response.text() : '';
@@ -17,9 +18,15 @@ export const createDeviceLinkManager = ({
   };
 
   const fetchJson = async (url, options = {}, defaultErrorMessage) => {
+    const preferredDeviceId = resolvePreferredDeviceId ? await resolvePreferredDeviceId() : null;
+    const headers = { ...options.headers };
+    if (preferredDeviceId) {
+      headers['X-Chat-Device-Id'] = preferredDeviceId;
+    }
     const response = await fetchImpl(url, {
       credentials: 'include',
       ...options,
+      headers,
     });
     const payload = await parseResponsePayload(response);
     if (!response.ok) {
@@ -27,7 +34,6 @@ export const createDeviceLinkManager = ({
     }
     return payload;
   };
-
   const uploadOneTimePrekeys = async (deviceId, oneTimePrekeys = []) => {
     if (!deviceId || !Array.isArray(oneTimePrekeys) || oneTimePrekeys.length === 0) {
       return;

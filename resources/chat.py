@@ -371,7 +371,7 @@ def _parse_query_bool(arg_name, default=None):
 
 
 def _preferred_request_device_id():
-    raw_value = request.args.get('preferred_device_id')
+    raw_value = request.args.get('preferred_device_id') or request.headers.get('X-Chat-Device-Id')
     if not isinstance(raw_value, str):
         return None
     normalized = raw_value.strip()
