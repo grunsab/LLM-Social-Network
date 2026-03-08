@@ -248,7 +248,7 @@ class ChatDevice(db.Model):
         nullable=False
     )
     revoked_at = db.Column(db.DateTime, nullable=True)
-    approved_by_device_id = db.Column(db.String(36), db.ForeignKey('chat_device.device_id'), nullable=True)
+    approved_by_device_id = db.Column(db.String(64), db.ForeignKey('chat_device.device_id'), nullable=True)
 
     __table_args__ = (
         db.UniqueConstraint('user_id', 'device_id', name='uq_chat_device_user_device'),
@@ -315,7 +315,7 @@ class ChatTransportIdentityMapping(db.Model):
 class ChatDeviceLinkSession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
-    pending_device_id = db.Column(db.String(36), nullable=False, index=True)
+    pending_device_id = db.Column(db.String(64), nullable=False, index=True)
     pending_identity_key_public = db.Column(db.Text, nullable=False)
     pending_signing_key_public = db.Column(db.Text, nullable=False)
     pending_signed_prekey_id = db.Column(db.Integer, nullable=False)
@@ -328,7 +328,7 @@ class ChatDeviceLinkSession(db.Model):
         index=True
     )
     approval_code_hash = db.Column(db.String(255), nullable=False)
-    approved_by_device_id = db.Column(db.String(36), db.ForeignKey('chat_device.device_id'), nullable=True)
+    approved_by_device_id = db.Column(db.String(64), db.ForeignKey('chat_device.device_id'), nullable=True)
     expires_at = db.Column(db.DateTime, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = db.Column(
@@ -481,7 +481,7 @@ class UserInterest(db.Model):
 # New InviteCode model
 class InviteCode(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    code = db.Column(db.String(64), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     issuer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) # User who created the code (issuer)
     is_used = db.Column(db.Boolean, default=False, nullable=False) 
     used_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # FK for who used the code
