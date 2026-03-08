@@ -8,6 +8,6 @@
     "npm": "11.x"
   },
   "scripts": {
-    "heroku-postbuild": "cd frontend && npm ci --include=dev && npm run build"
+    "heroku-postbuild": "ls -la frontend/package-lock.json && cd frontend && npm install --include=dev && npm run build"
   }
 }
