@@ -36,9 +36,11 @@ import {
 // Import all reducer arg schemas
 import AddGroupMemberReducer from "./add_group_member_reducer";
 import CreateGroupReducer from "./create_group_reducer";
+import EmitDeviceRosterChangeReducer from "./emit_device_roster_change_reducer";
 import EnsureDmReducer from "./ensure_dm_reducer";
 import MarkReadReducer from "./mark_read_reducer";
-import RegisterUserIdentityReducer from "./register_user_identity_reducer";
+import PublishConversationKeyPackagesReducer from "./publish_conversation_key_packages_reducer";
+import RegisterDeviceIdentityReducer from "./register_device_identity_reducer";
 import SendMessageReducer from "./send_message_reducer";
 import SetTypingReducer from "./set_typing_reducer";
 
@@ -46,6 +48,8 @@ import SetTypingReducer from "./set_typing_reducer";
 
 // Import all table schema definitions
 import MyConversationsRow from "./my_conversations_table";
+import MyConversationKeyPackagesRow from "./my_conversation_key_packages_table";
+import MyConversationMembershipEventsRow from "./my_conversation_membership_events_table";
 import MyMessagesRow from "./my_messages_table";
 import MyPresenceRow from "./my_presence_table";
 import MyReadStateRow from "./my_read_state_table";
@@ -62,6 +66,20 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyConversationsRow),
+  my_conversation_key_packages: __table({
+    name: 'my_conversation_key_packages',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyConversationKeyPackagesRow),
+  my_conversation_membership_events: __table({
+    name: 'my_conversation_membership_events',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyConversationMembershipEventsRow),
   my_messages: __table({
     name: 'my_messages',
     indexes: [
@@ -96,9 +114,11 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("add_group_member", AddGroupMemberReducer),
   __reducerSchema("create_group", CreateGroupReducer),
+  __reducerSchema("emit_device_roster_change", EmitDeviceRosterChangeReducer),
   __reducerSchema("ensure_dm", EnsureDmReducer),
   __reducerSchema("mark_read", MarkReadReducer),
-  __reducerSchema("register_user_identity", RegisterUserIdentityReducer),
+  __reducerSchema("publish_conversation_key_packages", PublishConversationKeyPackagesReducer),
+  __reducerSchema("register_device_identity", RegisterDeviceIdentityReducer),
   __reducerSchema("send_message", SendMessageReducer),
   __reducerSchema("set_typing", SetTypingReducer),
 );
@@ -156,4 +176,3 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
-

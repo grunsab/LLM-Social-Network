@@ -15,4 +15,5 @@ export default {
   title: __t.string(),
   creatorUserId: __t.u64(),
   memberUserIds: __t.array(__t.u64()),
+  encryptionMode: __t.option(__t.string()).name("encryption_mode"),
 };

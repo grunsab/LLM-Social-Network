@@ -2,7 +2,7 @@ import uuid
 
 import resources.chat as chat_module
 
-from models import ChatIdentityMapping
+from models import ChatIdentityMapping, ChatTransportIdentityMapping
 
 
 def _register_user(client, username, email, password='p'):
@@ -50,6 +50,26 @@ def _befriend(client, sender_identifier, receiver_identifier, receiver_id):
     _logout_user(client)
 
 
+def _register_chat_device(client, device_id, label='Primary browser'):
+    response = client.post(
+        '/api/v1/chat/e2ee/devices',
+        json={
+            'device_id': device_id,
+            'label': label,
+            'identity_key_public': f'identity-{device_id}',
+            'signing_key_public': f'signing-{device_id}',
+            'signed_prekey_id': 101,
+            'signed_prekey_public': f'signed-prekey-{device_id}',
+            'signed_prekey_signature': f'signed-prekey-signature-{device_id}',
+            'one_time_prekeys': [
+                {'prekey_id': 1, 'public_key': f'prekey-1-{device_id}'},
+            ],
+        }
+    )
+    assert response.status_code == 201, response.get_json()
+    return response.get_json()
+
+
 def _mock_spacetime(monkeypatch, sql_results_by_match=None):
     call_log = {
         'calls': [],
@@ -93,7 +113,7 @@ def test_chat_bootstrap_requires_auth(client):
 
 
 def test_chat_bootstrap_success_creates_identity_mapping(client, monkeypatch):
-    _mock_spacetime(monkeypatch)
+    call_log = _mock_spacetime(monkeypatch)
     _register_user(client, 'chat_bootstrap_user', 'chat_bootstrap_user@example.com')
     user_id = _login_user(client, 'chat_bootstrap_user')
 
@@ -112,6 +132,18 @@ def test_chat_bootstrap_success_creates_identity_mapping(client, monkeypatch):
         assert mapping.spacetimedb_identity == payload['identity']
         assert mapping.token_encrypted != f"identity-token-{user_id}"
 
+    register_calls = [entry for entry in call_log['calls'] if entry[0] == 'register_device_identity']
+    assert register_calls == [
+        (
+            'register_device_identity',
+            [
+                user_id,
+                f'legacy-user-{user_id}',
+                {'__identity__': payload['identity']},
+            ]
+        )
+    ]
+
 
 def test_chat_bootstrap_reuses_existing_identity_mapping(client, monkeypatch):
     call_log = _mock_spacetime(monkeypatch)
@@ -125,6 +157,41 @@ def test_chat_bootstrap_reuses_existing_identity_mapping(client, monkeypatch):
     assert second_response.status_code == 200
     assert first_response.get_json()['identity'] == second_response.get_json()['identity']
     assert len(call_log['created_identities']) == 1
+
+
+def test_chat_bootstrap_prefers_active_device_transport_identity(client, monkeypatch):
+    _mock_spacetime(monkeypatch)
+    _register_user(client, 'chat_bootstrap_device', 'chat_bootstrap_device@example.com')
+    user_id = _login_user(client, 'chat_bootstrap_device')
+
+    registration_response = client.post(
+        '/api/v1/chat/e2ee/devices',
+        json={
+            'device_id': 'device-bootstrap-001',
+            'label': 'Primary browser',
+            'identity_key_public': 'identity-device-bootstrap-001',
+            'signing_key_public': 'signing-device-bootstrap-001',
+            'signed_prekey_id': 101,
+            'signed_prekey_public': 'signed-prekey-device-bootstrap-001',
+            'signed_prekey_signature': 'signed-prekey-signature-device-bootstrap-001',
+            'one_time_prekeys': [
+                {'prekey_id': 1, 'public_key': 'prekey-1-device-bootstrap-001'},
+            ],
+        }
+    )
+    assert registration_response.status_code == 201, registration_response.get_json()
+
+    bootstrap_response = client.get('/api/v1/chat/bootstrap')
+    assert bootstrap_response.status_code == 200, bootstrap_response.get_json()
+    payload = bootstrap_response.get_json()
+    assert payload['device_id'] == 'device-bootstrap-001'
+
+    with client.application.app_context():
+        legacy_mapping = ChatIdentityMapping.query.filter_by(user_id=user_id).first()
+        device_mapping = ChatTransportIdentityMapping.query.filter_by(user_id=user_id).first()
+        assert legacy_mapping is None
+        assert device_mapping is not None
+        assert device_mapping.spacetimedb_identity == payload['identity']
 
 
 def test_chat_bootstrap_falls_back_to_db_id_when_name_missing(client, monkeypatch):
@@ -169,6 +236,45 @@ def test_chat_dm_success_for_friends(client, monkeypatch):
     low, high = sorted((user_a_id, user_b_id))
     assert payload['conversation_id'] == f'dm:{low}:{high}'
     assert payload['kind'] == 'dm'
+
+
+def test_chat_dm_rejects_encrypted_creation_when_rollout_is_disabled(client, monkeypatch):
+    _mock_spacetime(monkeypatch)
+    user_a_id = _register_user(client, 'chat_dm_rollout_a', 'chat_dm_rollout_a@example.com')
+    user_b_id = _register_user(client, 'chat_dm_rollout_b', 'chat_dm_rollout_b@example.com')
+    _befriend(client, 'chat_dm_rollout_a', 'chat_dm_rollout_b', user_b_id)
+
+    client.application.config['CHAT_E2EE_NEW_CONVERSATIONS_ENABLED'] = False
+    try:
+        _login_user(client, 'chat_dm_rollout_a')
+        response = client.post('/api/v1/chat/dm', json={
+            'user_id': user_b_id,
+            'encryption_mode': 'e2ee_v1',
+        })
+    finally:
+        client.application.config['CHAT_E2EE_NEW_CONVERSATIONS_ENABLED'] = True
+
+    assert response.status_code == 403
+    assert 'currently disabled for rollout' in response.get_json()['message']
+
+
+def test_chat_dm_rejects_encrypted_creation_when_participant_has_no_device(client, monkeypatch):
+    _mock_spacetime(monkeypatch)
+    _register_user(client, 'chat_dm_ready_a', 'chat_dm_ready_a@example.com')
+    user_b_id = _register_user(client, 'chat_dm_ready_b', 'chat_dm_ready_b@example.com')
+    _befriend(client, 'chat_dm_ready_a', 'chat_dm_ready_b', user_b_id)
+
+    _login_user(client, 'chat_dm_ready_a')
+    _register_chat_device(client, 'device-dm-ready-a')
+
+    response = client.post('/api/v1/chat/dm', json={
+        'user_id': user_b_id,
+        'encryption_mode': 'e2ee_v1',
+    })
+
+    assert response.status_code == 409
+    assert 'Missing active devices for user IDs' in response.get_json()['message']
+    assert str(user_b_id) in response.get_json()['message']
 
 
 def test_group_create_requires_mutual_friendships(client, monkeypatch):
@@ -239,14 +345,38 @@ def test_group_create_success_registers_members_and_calls_reducer(client, monkey
     assert payload['conversation_id'].startswith('grp:')
 
     reducer_calls = [entry for entry in call_log['calls'] if entry[0] != 'sql']
-    register_calls = [entry for entry in reducer_calls if entry[0] == 'register_user_identity']
+    register_calls = [entry for entry in reducer_calls if entry[0] == 'register_device_identity']
     create_group_calls = [entry for entry in reducer_calls if entry[0] == 'create_group']
 
-    assert len(register_calls) == 3
-    assert all(call[1][1]['__identity__'].startswith('0x') for call in register_calls)
+    assert register_calls == []
     assert len(create_group_calls) == 1
     assert create_group_calls[0][1][2] == user_a_id
     assert create_group_calls[0][1][3] == sorted([user_a_id, user_b_id, user_c_id])
+    assert create_group_calls[0][1][4] == 'legacy'
+
+
+def test_group_create_rejects_encrypted_members_without_devices(client, monkeypatch):
+    _mock_spacetime(monkeypatch)
+    user_a_id = _register_user(client, 'chat_group_e2ee_a', 'chat_group_e2ee_a@example.com')
+    user_b_id = _register_user(client, 'chat_group_e2ee_b', 'chat_group_e2ee_b@example.com')
+
+    _befriend(client, 'chat_group_e2ee_a', 'chat_group_e2ee_b', user_b_id)
+
+    _login_user(client, 'chat_group_e2ee_a')
+    _register_chat_device(client, 'device-group-ready-a')
+
+    response = client.post(
+        '/api/v1/chat/groups',
+        json={
+            'title': 'Encrypted Group',
+            'member_user_ids': [user_b_id],
+            'encryption_mode': 'e2ee_v1',
+        }
+    )
+
+    assert response.status_code == 409
+    assert 'Missing active devices for user IDs' in response.get_json()['message']
+    assert str(user_b_id) in response.get_json()['message']
 
 
 def test_group_member_add_success_requires_existing_membership(client, monkeypatch):
@@ -293,6 +423,49 @@ def test_group_member_add_success_requires_existing_membership(client, monkeypat
             [
                 'grp:test-room',
                 user_c_id,
+                user_a_id,
+                None,
             ]
         )
     ]
+
+
+def test_group_member_add_rejects_encrypted_member_without_device(client, monkeypatch):
+    user_a_id = _register_user(client, 'chat_group_e2ee_add_a', 'chat_group_e2ee_add_a@example.com')
+    user_b_id = _register_user(client, 'chat_group_e2ee_add_b', 'chat_group_e2ee_add_b@example.com')
+    user_c_id = _register_user(client, 'chat_group_e2ee_add_c', 'chat_group_e2ee_add_c@example.com')
+
+    _befriend(client, 'chat_group_e2ee_add_a', 'chat_group_e2ee_add_b', user_b_id)
+    _befriend(client, 'chat_group_e2ee_add_a', 'chat_group_e2ee_add_c', user_c_id)
+    _befriend(client, 'chat_group_e2ee_add_b', 'chat_group_e2ee_add_c', user_c_id)
+
+    call_log = _mock_spacetime(
+        monkeypatch,
+        sql_results_by_match={
+            "FROM conversation WHERE conversation_id = 'grp:e2ee-room'": [
+                {
+                    'conversation_id': 'grp:e2ee-room',
+                    'kind': 'group',
+                    'title': 'Encrypted Room',
+                    'encryption_mode': 'e2ee_v1',
+                }
+            ],
+            "FROM conversation_member WHERE conversation_id = 'grp:e2ee-room'": [
+                {'user_id': user_a_id},
+                {'user_id': user_b_id},
+            ],
+        }
+    )
+
+    _login_user(client, 'chat_group_e2ee_add_a')
+    _register_chat_device(client, 'device-group-add-a')
+
+    response = client.post(
+        '/api/v1/chat/groups/grp:e2ee-room/members',
+        json={'user_id': user_c_id}
+    )
+
+    assert response.status_code == 409
+    assert 'active chat device' in response.get_json()['message']
+    add_member_calls = [entry for entry in call_log['calls'] if entry[0] == 'add_group_member']
+    assert add_member_calls == []

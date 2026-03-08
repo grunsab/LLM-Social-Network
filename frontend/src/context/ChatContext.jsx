@@ -8,10 +8,31 @@ import React, {
   useState,
 } from 'react';
 
+import { createChatCryptoClient } from '../chat/crypto';
 import { DbConnection, tables } from '../spacetimedb/module_bindings';
 import { useAuth } from './AuthContext';
 
 const ChatContext = createContext(null);
+const LEGACY_ENCRYPTION_MODE = 'legacy';
+const E2EE_ENCRYPTION_MODE = 'e2ee_v1';
+
+const createDefaultE2eeState = () => ({
+  initialized: false,
+  enabled: false,
+  newConversationsEnabled: false,
+  currentDeviceId: null,
+  hasActiveDevice: false,
+  devices: [],
+  localDevice: null,
+  localDeviceState: 'disabled',
+  storageKind: null,
+  supported: false,
+  autoRegistered: false,
+  remainingOneTimePrekeys: 0,
+  minOneTimePrekeys: 0,
+  pendingLinkSessions: [],
+  error: '',
+});
 
 const parseResponsePayload = async (response) => {
   if (typeof response.text === 'function') {
@@ -70,6 +91,8 @@ const normalizeConversation = (row) => ({
   kind: row.kind,
   title: row.title,
   createdByUserId: toNumber(row.createdByUserId),
+  encryptionMode: row.encryptionMode || LEGACY_ENCRYPTION_MODE,
+  currentEpoch: Number(row.currentEpoch ?? 0),
   createdAtMs: timestampToMillis(row.createdAt),
   lastMessageAtMs: timestampToMillis(row.lastMessageAt),
   lastMessageId: row.lastMessageId || null,
@@ -79,10 +102,49 @@ const normalizeConversation = (row) => ({
 });
 
 const normalizeMessage = (row) => ({
+  payloadId: row.payloadId || row.messageId,
   messageId: row.messageId,
   conversationId: row.conversationId,
   senderUserId: toNumber(row.senderUserId),
-  ciphertext: row.ciphertext,
+  senderDeviceId: row.senderDeviceId || null,
+  protocolVersion: row.protocolVersion || null,
+  messageType: row.messageType || 'chat',
+  conversationEpoch: Number(row.conversationEpoch ?? 0),
+  deliveryScope: row.deliveryScope || 'conversation',
+  recipientUserId: row.recipientUserId == null ? null : toNumber(row.recipientUserId),
+  recipientDeviceId: row.recipientDeviceId || null,
+  nonce: row.nonce || '',
+  aad: row.aad || '',
+  wireCiphertext: row.ciphertext || '',
+  ciphertext: row.ciphertext || '',
+  bodyText: row.ciphertext || '',
+  messageState: 'legacy',
+  createdAtMs: timestampToMillis(row.createdAt),
+  createdAtIso: toIsoString(row.createdAt),
+});
+
+const normalizeConversationKeyPackage = (row) => ({
+  packageId: row.packageId,
+  conversationId: row.conversationId,
+  epoch: Number(row.epoch ?? 0),
+  recipientUserId: row.recipientUserId == null ? null : toNumber(row.recipientUserId),
+  recipientDeviceId: row.recipientDeviceId,
+  senderUserId: toNumber(row.senderUserId),
+  senderDeviceId: row.senderDeviceId,
+  sealedSenderKey: row.sealedSenderKey,
+  createdAtMs: timestampToMillis(row.createdAt),
+  createdAtIso: toIsoString(row.createdAt),
+});
+
+const normalizeConversationMembershipEvent = (row) => ({
+  eventId: row.eventId,
+  conversationId: row.conversationId,
+  eventType: row.eventType,
+  targetUserId: toNumber(row.targetUserId),
+  targetDeviceId: row.targetDeviceId || null,
+  actorUserId: toNumber(row.actorUserId),
+  actorDeviceId: row.actorDeviceId || null,
+  newEpoch: Number(row.newEpoch ?? 0),
   createdAtMs: timestampToMillis(row.createdAt),
   createdAtIso: toIsoString(row.createdAt),
 });
@@ -128,6 +190,9 @@ export const ChatProvider = ({ children }) => {
   const [activeConversationId, setActiveConversationId] = useState(null);
   const [unreadCounts, setUnreadCounts] = useState({});
   const [totalUnread, setTotalUnread] = useState(0);
+  const [e2eeState, setE2eeState] = useState(createDefaultE2eeState);
+  const [conversationKeyPackagesByConversation, setConversationKeyPackagesByConversation] = useState({});
+  const [conversationMembershipEventsByConversation, setConversationMembershipEventsByConversation] = useState({});
 
   const connectionRef = useRef(null);
   const subscriptionRef = useRef(null);
@@ -135,6 +200,71 @@ export const ChatProvider = ({ children }) => {
   const connectPromiseRef = useRef(null);
   const lastReadMessageRef = useRef({});
   const chatUserIdRef = useRef(null);
+  const refreshSequenceRef = useRef(0);
+  const e2eeStateRef = useRef(createDefaultE2eeState());
+  const conversationMembershipEventsRef = useRef({});
+  const cryptoClientRef = useRef(null);
+
+  if (!cryptoClientRef.current) {
+    cryptoClientRef.current = createChatCryptoClient();
+  }
+
+  useEffect(() => {
+    e2eeStateRef.current = e2eeState;
+  }, [e2eeState]);
+
+  useEffect(() => {
+    conversationMembershipEventsRef.current = conversationMembershipEventsByConversation;
+  }, [conversationMembershipEventsByConversation]);
+
+  const applyE2eeResult = useCallback((result, overrides = {}) => {
+    setE2eeState((previousValue) => ({
+      initialized: true,
+      enabled: Boolean(result?.bootstrap?.enabled),
+      newConversationsEnabled: Boolean(result?.bootstrap?.new_conversations_enabled),
+      currentDeviceId: overrides.currentDeviceId
+        ?? result?.bootstrap?.current_device_id
+        ?? previousValue.currentDeviceId
+        ?? null,
+      hasActiveDevice: Boolean(result?.bootstrap?.has_active_device),
+      devices: Array.isArray(result?.bootstrap?.devices) ? result.bootstrap.devices : [],
+      localDevice: overrides.localDevice
+        ?? result?.localDevice
+        ?? previousValue.localDevice
+        ?? null,
+      localDeviceState: result?.localDeviceState
+        || (
+          overrides.localDevice || result?.localDevice
+            ? 'registered'
+            : (result?.supported === false ? 'unsupported_browser' : previousValue.localDeviceState)
+        ),
+      storageKind: result?.storageKind || previousValue.storageKind || cryptoClientRef.current?.storeKind || null,
+      supported: result?.supported !== false,
+      autoRegistered: Boolean(result?.autoRegistered),
+      remainingOneTimePrekeys: Number(result?.bootstrap?.remaining_one_time_prekeys ?? 0),
+      minOneTimePrekeys: Number(result?.bootstrap?.min_one_time_prekeys ?? 0),
+      pendingLinkSessions: previousValue.pendingLinkSessions || [],
+      error: result?.error || '',
+    }));
+  }, []);
+
+  const syncPendingLinkSessions = useCallback(async () => {
+    const pendingSessions = await cryptoClientRef.current.listPendingLinkSessions();
+    const normalizedSessions = Array.isArray(pendingSessions)
+      ? [...pendingSessions]
+        .map((sessionRow) => ({
+          ...sessionRow,
+          expiresAtMs: timestampToMillis(sessionRow.expiresAt || sessionRow.expires_at || null),
+        }))
+        .sort((a, b) => (a.expiresAtMs || 0) - (b.expiresAtMs || 0))
+      : [];
+
+    setE2eeState((previousValue) => ({
+      ...previousValue,
+      pendingLinkSessions: normalizedSessions,
+    }));
+    return normalizedSessions;
+  }, []);
 
   const resetState = useCallback(() => {
     setLoading(false);
@@ -151,7 +281,11 @@ export const ChatProvider = ({ children }) => {
     setActiveConversationId(null);
     setUnreadCounts({});
     setTotalUnread(0);
+    setE2eeState(createDefaultE2eeState());
+    setConversationKeyPackagesByConversation({});
+    setConversationMembershipEventsByConversation({});
     lastReadMessageRef.current = {};
+    refreshSequenceRef.current = 0;
   }, []);
 
   const cleanupConnection = useCallback(() => {
@@ -213,8 +347,10 @@ export const ChatProvider = ({ children }) => {
     return { counts, total };
   }, []);
 
-  const refreshFromCache = useCallback((conn) => {
+  const refreshFromCache = useCallback(async (conn) => {
     if (!conn) return;
+    const refreshSequence = refreshSequenceRef.current + 1;
+    refreshSequenceRef.current = refreshSequence;
 
     const nextConversations = Array.from(conn.db.my_conversations.iter())
       .map(normalizeConversation)
@@ -233,6 +369,24 @@ export const ChatProvider = ({ children }) => {
     Object.values(nextMessagesByConversation).forEach((rows) => {
       rows.sort((a, b) => a.createdAtMs - b.createdAtMs);
     });
+
+    const nextConversationKeyPackages = conn.db.my_conversation_key_packages
+      ? Array.from(conn.db.my_conversation_key_packages.iter()).map(normalizeConversationKeyPackage)
+      : [];
+    const nextConversationMembershipEventsByConversation = {};
+    if (conn.db.my_conversation_membership_events) {
+      Array.from(conn.db.my_conversation_membership_events.iter())
+        .map(normalizeConversationMembershipEvent)
+        .forEach((eventRow) => {
+          if (!nextConversationMembershipEventsByConversation[eventRow.conversationId]) {
+            nextConversationMembershipEventsByConversation[eventRow.conversationId] = [];
+          }
+          nextConversationMembershipEventsByConversation[eventRow.conversationId].push(eventRow);
+        });
+      Object.values(nextConversationMembershipEventsByConversation).forEach((rows) => {
+        rows.sort((a, b) => a.createdAtMs - b.createdAtMs);
+      });
+    }
 
     const nextTypingByConversation = {};
     Array.from(conn.db.my_typing.iter())
@@ -261,16 +415,51 @@ export const ChatProvider = ({ children }) => {
         nextPresenceByUserId[presenceRow.userId] = presenceRow;
       });
 
+    let nextResolvedMessagesByConversation = nextMessagesByConversation;
+    let nextConversationKeyPackagesByConversation = {};
+
+    try {
+      if (nextConversationKeyPackages.length > 0) {
+        nextConversationKeyPackagesByConversation = await cryptoClientRef.current.ingestConversationKeyPackages({
+          packageRows: nextConversationKeyPackages,
+          currentDeviceId: e2eeStateRef.current.currentDeviceId,
+        });
+      }
+      await cryptoClientRef.current.ensureGroupConversationState({
+        conn,
+        conversations: nextConversations,
+        currentUserId: chatUserIdRef.current,
+        currentDeviceId: e2eeStateRef.current.currentDeviceId,
+        membershipEventsByConversation: nextConversationMembershipEventsByConversation,
+      });
+      nextResolvedMessagesByConversation = await cryptoClientRef.current.resolveMessages({
+        conversations: nextConversations,
+        messagesByConversation: nextMessagesByConversation,
+        currentDeviceId: e2eeStateRef.current.currentDeviceId,
+      });
+    } catch (cryptoError) {
+      setE2eeState((previousValue) => ({
+        ...previousValue,
+        error: cryptoError.message || 'Failed to resolve encrypted chat state.',
+      }));
+    }
+
+    if (refreshSequence !== refreshSequenceRef.current) {
+      return;
+    }
+
     setConversations(nextConversations);
-    setMessagesByConversation(nextMessagesByConversation);
+    setMessagesByConversation(nextResolvedMessagesByConversation);
     setTypingByConversation(nextTypingByConversation);
     setReadStateByConversation(nextReadByConversation);
     setPresenceByUserId(nextPresenceByUserId);
+    setConversationKeyPackagesByConversation(nextConversationKeyPackagesByConversation);
+    setConversationMembershipEventsByConversation(nextConversationMembershipEventsByConversation);
 
     const currentChatUserId = chatUserIdRef.current;
     if (currentChatUserId != null) {
       const { counts, total } = computeUnread(
-        nextMessagesByConversation,
+        nextResolvedMessagesByConversation,
         nextReadByConversation,
         currentChatUserId
       );
@@ -303,9 +492,21 @@ export const ChatProvider = ({ children }) => {
 
   const attachListeners = useCallback((conn) => {
     const cleanupFns = [];
-    const tableNames = ['my_conversations', 'my_messages', 'my_typing', 'my_read_state', 'my_presence'];
+    const tableNames = [
+      'my_conversations',
+      'my_conversation_key_packages',
+      'my_conversation_membership_events',
+      'my_messages',
+      'my_typing',
+      'my_read_state',
+      'my_presence',
+    ];
 
-    const callback = () => refreshFromCache(conn);
+    const callback = () => {
+      refreshFromCache(conn).catch(() => {
+        // E2EE resolution errors are surfaced through context state.
+      });
+    };
 
     tableNames.forEach((tableName) => {
       const table = conn.db[tableName];
@@ -337,7 +538,18 @@ export const ChatProvider = ({ children }) => {
       setLoading(true);
       setError('');
 
-      const bootstrapResponse = await fetch('/api/v1/chat/bootstrap', {
+      const cryptoBootstrapResult = await cryptoClientRef.current.initialize();
+      applyE2eeResult(cryptoBootstrapResult);
+      await syncPendingLinkSessions();
+
+      const preferredDeviceId = cryptoBootstrapResult?.localDevice?.deviceId
+        || cryptoBootstrapResult?.bootstrap?.current_device_id
+        || null;
+      const bootstrapUrl = preferredDeviceId
+        ? `/api/v1/chat/bootstrap?preferred_device_id=${encodeURIComponent(preferredDeviceId)}`
+        : '/api/v1/chat/bootstrap';
+
+      const bootstrapResponse = await fetch(bootstrapUrl, {
         credentials: 'include',
       });
       if (!bootstrapResponse.ok) {
@@ -353,6 +565,9 @@ export const ChatProvider = ({ children }) => {
       const nextChatUserId = Number(bootstrap.user_id);
       chatUserIdRef.current = nextChatUserId;
       setChatUserId(nextChatUserId);
+      applyE2eeResult(cryptoBootstrapResult, {
+        currentDeviceId: bootstrap.device_id || cryptoBootstrapResult?.bootstrap?.current_device_id || null,
+      });
 
       const conn = DbConnection.builder()
         .withUri(bootstrap.ws_url)
@@ -365,19 +580,26 @@ export const ChatProvider = ({ children }) => {
           subscriptionRef.current = connectedConn
             .subscriptionBuilder()
             .onApplied(() => {
-              refreshFromCache(connectedConn);
-              setLoading(false);
+              refreshFromCache(connectedConn)
+                .catch(() => {
+                  // E2EE resolution errors are surfaced through context state.
+                })
+                .finally(() => {
+                  setLoading(false);
+                });
             })
             .onError((_ctx, subscriptionError) => {
               setError(subscriptionError?.message || 'Chat subscription failed.');
             })
             .subscribe([
               tables.my_conversations,
+              tables.my_conversation_key_packages,
+              tables.my_conversation_membership_events,
               tables.my_messages,
               tables.my_typing,
               tables.my_read_state,
               tables.my_presence,
-            ]);
+            ].filter(Boolean));
 
           attachListeners(connectedConn);
         })
@@ -410,7 +632,7 @@ export const ChatProvider = ({ children }) => {
     } finally {
       connectPromiseRef.current = null;
     }
-  }, [attachListeners, cleanupConnection, currentUser, fetchFriends, refreshFromCache]);
+  }, [applyE2eeResult, attachListeners, cleanupConnection, currentUser, fetchFriends, refreshFromCache, syncPendingLinkSessions]);
 
   const disconnect = useCallback(() => {
     cleanupConnection();
@@ -418,11 +640,35 @@ export const ChatProvider = ({ children }) => {
   }, [cleanupConnection, resetState]);
 
   const createDm = useCallback(async (userId) => {
+    const shouldAttemptEncryptedDm = Boolean(
+      e2eeState.enabled
+      && e2eeState.newConversationsEnabled
+      && e2eeState.currentDeviceId
+      && e2eeState.localDevice
+      && e2eeState.supported
+    );
+    let encryptionMode = LEGACY_ENCRYPTION_MODE;
+    if (shouldAttemptEncryptedDm) {
+      try {
+        const remoteBundles = await cryptoClientRef.current.fetchUserDeviceBundles(Number(userId), {
+          claimPrekeys: false,
+        });
+        if (Array.isArray(remoteBundles.devices) && remoteBundles.devices.length > 0) {
+          encryptionMode = E2EE_ENCRYPTION_MODE;
+        }
+      } catch (_error) {
+        encryptionMode = LEGACY_ENCRYPTION_MODE;
+      }
+    }
+
     const response = await fetch('/api/v1/chat/dm', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: Number(userId) }),
+      body: JSON.stringify({
+        user_id: Number(userId),
+        encryption_mode: encryptionMode,
+      }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -432,9 +678,33 @@ export const ChatProvider = ({ children }) => {
       setActiveConversationId(payload.conversation_id);
     }
     return payload;
-  }, []);
+  }, [e2eeState.currentDeviceId, e2eeState.enabled, e2eeState.localDevice, e2eeState.newConversationsEnabled, e2eeState.supported]);
 
   const createGroup = useCallback(async (title, memberUserIds) => {
+    const shouldAttemptEncryptedGroup = Boolean(
+      e2eeState.enabled
+      && e2eeState.newConversationsEnabled
+      && e2eeState.currentDeviceId
+      && e2eeState.localDevice
+      && e2eeState.supported
+    );
+    let encryptionMode = LEGACY_ENCRYPTION_MODE;
+
+    if (shouldAttemptEncryptedGroup) {
+      try {
+        const bundleResults = await Promise.all(
+          memberUserIds.map((userId) => cryptoClientRef.current.fetchUserDeviceBundles(Number(userId), {
+            claimPrekeys: false,
+          }))
+        );
+        if (bundleResults.every((result) => Array.isArray(result.devices) && result.devices.length > 0)) {
+          encryptionMode = E2EE_ENCRYPTION_MODE;
+        }
+      } catch (_error) {
+        encryptionMode = LEGACY_ENCRYPTION_MODE;
+      }
+    }
+
     const response = await fetch('/api/v1/chat/groups', {
       method: 'POST',
       credentials: 'include',
@@ -442,6 +712,7 @@ export const ChatProvider = ({ children }) => {
       body: JSON.stringify({
         title,
         member_user_ids: memberUserIds.map((value) => Number(value)),
+        encryption_mode: encryptionMode,
       }),
     });
     const payload = await response.json().catch(() => ({}));
@@ -451,8 +722,32 @@ export const ChatProvider = ({ children }) => {
     if (payload.conversation_id) {
       setActiveConversationId(payload.conversation_id);
     }
+    if (
+      encryptionMode === E2EE_ENCRYPTION_MODE
+      && connectionRef.current
+      && e2eeStateRef.current.currentDeviceId
+      && chatUserIdRef.current != null
+      && payload.conversation_id
+    ) {
+      await cryptoClientRef.current.ensureGroupConversationState({
+        conn: connectionRef.current,
+        conversations: [
+          {
+            conversationId: payload.conversation_id,
+            kind: 'group',
+            title,
+            createdByUserId: chatUserIdRef.current,
+            encryptionMode,
+            currentEpoch: 1,
+          },
+        ],
+        currentUserId: chatUserIdRef.current,
+        currentDeviceId: e2eeStateRef.current.currentDeviceId,
+        membershipEventsByConversation: {},
+      });
+    }
     return payload;
-  }, []);
+  }, [e2eeState.currentDeviceId, e2eeState.enabled, e2eeState.localDevice, e2eeState.newConversationsEnabled, e2eeState.supported]);
 
   const addGroupMember = useCallback(async (conversationId, userId) => {
     const response = await fetch(`/api/v1/chat/groups/${conversationId}/members`, {
@@ -468,16 +763,96 @@ export const ChatProvider = ({ children }) => {
     return payload;
   }, []);
 
-  const sendMessage = useCallback(async (conversationId, ciphertext) => {
+  const refreshE2eeState = useCallback(async (overrides = {}) => {
+    const result = await cryptoClientRef.current.refreshBootstrap();
+    applyE2eeResult(result, overrides);
+    await syncPendingLinkSessions();
+    if (connectionRef.current) {
+      refreshFromCache(connectionRef.current).catch(() => {
+        // E2EE resolution errors are surfaced through context state.
+      });
+    }
+    return result;
+  }, [applyE2eeResult, refreshFromCache, syncPendingLinkSessions]);
+
+  const rotateSignedPrekey = useCallback(async () => {
+    const localDevice = e2eeStateRef.current.localDevice;
+    if (!localDevice) {
+      throw new Error('No local chat device is available for signed-prekey rotation.');
+    }
+    const nextLocalDevice = await cryptoClientRef.current.rotateSignedPrekey(localDevice);
+    await refreshE2eeState({
+      currentDeviceId: nextLocalDevice.deviceId,
+      localDevice: nextLocalDevice,
+    });
+    return nextLocalDevice;
+  }, [refreshE2eeState]);
+
+  const replenishOneTimePrekeys = useCallback(async (targetCount) => {
+    const localDevice = e2eeStateRef.current.localDevice;
+    if (!localDevice) {
+      throw new Error('No local chat device is available for one-time prekey replenishment.');
+    }
+    const nextLocalDevice = await cryptoClientRef.current.replenishOneTimePrekeys(localDevice, targetCount);
+    await refreshE2eeState({
+      currentDeviceId: nextLocalDevice.deviceId,
+      localDevice: nextLocalDevice,
+    });
+    return nextLocalDevice;
+  }, [refreshE2eeState]);
+
+  const revokeDevice = useCallback(async (deviceId) => {
+    const revokedDevice = await cryptoClientRef.current.revokeDevice(deviceId);
+    await refreshE2eeState({
+      currentDeviceId: deviceId === e2eeStateRef.current.currentDeviceId ? null : e2eeStateRef.current.currentDeviceId,
+      localDevice: deviceId === e2eeStateRef.current.currentDeviceId ? null : e2eeStateRef.current.localDevice,
+    });
+    return revokedDevice;
+  }, [refreshE2eeState]);
+
+  const startDeviceLink = useCallback(async (options) => {
+    const result = await cryptoClientRef.current.startCandidateLink(options);
+    await syncPendingLinkSessions();
+    return result;
+  }, [syncPendingLinkSessions]);
+
+  const approveDeviceLink = useCallback(async ({ linkSessionId, approvalCode, approverDeviceId } = {}) => {
+    const result = await cryptoClientRef.current.approveCandidateLink({
+      linkSessionId,
+      approvalCode,
+      approverDeviceId: approverDeviceId || e2eeStateRef.current.currentDeviceId,
+    });
+    await refreshE2eeState();
+    return result;
+  }, [refreshE2eeState]);
+
+  const completeDeviceLink = useCallback(async (linkSessionId) => {
+    const result = await cryptoClientRef.current.completeCandidateLink(linkSessionId);
+    if (result?.status === 'active') {
+      await refreshE2eeState({
+        currentDeviceId: result.current_device_id || null,
+      });
+    } else {
+      await syncPendingLinkSessions();
+    }
+    return result;
+  }, [refreshE2eeState, syncPendingLinkSessions]);
+
+  const sendMessage = useCallback(async (conversationId, plaintext) => {
     const conn = connectionRef.current;
     if (!conn) {
       throw new Error('Chat connection is not active.');
     }
-    await conn.reducers.sendMessage({
-      conversationId,
-      ciphertext,
+    const conversation = conversations.find((row) => row.conversationId === conversationId) || null;
+    await cryptoClientRef.current.sendMessage({
+      conn,
+      conversation,
+      plaintext,
+      currentUserId: chatUserIdRef.current,
+      currentDeviceId: e2eeStateRef.current.currentDeviceId,
+      membershipEvents: conversationMembershipEventsRef.current[conversationId] || [],
     });
-  }, []);
+  }, [conversations]);
 
   const setTyping = useCallback(async (conversationId, isTyping) => {
     const conn = connectionRef.current;
@@ -524,6 +899,13 @@ export const ChatProvider = ({ children }) => {
     });
   }, [currentUser, ensureConnected]);
 
+  useEffect(() => {
+    if (!connectionRef.current) return;
+    refreshFromCache(connectionRef.current).catch(() => {
+      // E2EE resolution errors are surfaced through context state.
+    });
+  }, [e2eeState.currentDeviceId, refreshFromCache]);
+
   const value = useMemo(() => ({
     loading,
     connected,
@@ -539,15 +921,27 @@ export const ChatProvider = ({ children }) => {
     setActiveConversationId,
     unreadCounts,
     totalUnread,
+    e2ee: {
+      ...e2eeState,
+      conversationKeyPackagesByConversation,
+      conversationMembershipEventsByConversation,
+    },
     ensureConnected,
     disconnect,
     refreshFromCache: () => refreshFromCache(connectionRef.current),
+    refreshE2eeState,
     createDm,
     createGroup,
     addGroupMember,
     sendMessage,
     setTyping,
     markRead,
+    rotateSignedPrekey,
+    replenishOneTimePrekeys,
+    revokeDevice,
+    startDeviceLink,
+    approveDeviceLink,
+    completeDeviceLink,
     fetchFriends,
   }), [
     loading,
@@ -563,15 +957,25 @@ export const ChatProvider = ({ children }) => {
     activeConversationId,
     unreadCounts,
     totalUnread,
+    e2eeState,
+    conversationKeyPackagesByConversation,
+    conversationMembershipEventsByConversation,
     ensureConnected,
     disconnect,
     refreshFromCache,
+    refreshE2eeState,
     createDm,
     createGroup,
     addGroupMember,
     sendMessage,
     setTyping,
     markRead,
+    rotateSignedPrekey,
+    replenishOneTimePrekeys,
+    revokeDevice,
+    startDeviceLink,
+    approveDeviceLink,
+    completeDeviceLink,
     fetchFriends,
   ]);
 

@@ -16,18 +16,21 @@ export const AdminIdentity = __t.object("AdminIdentity", {
 });
 export type AdminIdentity = __Infer<typeof AdminIdentity>;
 
-export const AppUserIdentity = __t.object("AppUserIdentity", {
+export const AppDeviceIdentity = __t.object("AppDeviceIdentity", {
+  deviceId: __t.string(),
   userId: __t.u64(),
   identity: __t.identity(),
   createdAt: __t.timestamp(),
 });
-export type AppUserIdentity = __Infer<typeof AppUserIdentity>;
+export type AppDeviceIdentity = __Infer<typeof AppDeviceIdentity>;
 
 export const Conversation = __t.object("Conversation", {
   conversationId: __t.string(),
   kind: __t.string(),
   title: __t.string(),
   createdByUserId: __t.u64(),
+  encryptionMode: __t.string(),
+  currentEpoch: __t.u32(),
   createdAt: __t.timestamp(),
   lastMessageAt: __t.timestamp(),
   lastMessageId: __t.option(__t.string()),
@@ -38,7 +41,6 @@ export const ConversationMember = __t.object("ConversationMember", {
   memberId: __t.string(),
   conversationId: __t.string(),
   userId: __t.u64(),
-  identity: __t.identity(),
   joinedAt: __t.timestamp(),
 });
 export type ConversationMember = __Infer<typeof ConversationMember>;
@@ -48,6 +50,8 @@ export const ConversationViewRow = __t.object("ConversationViewRow", {
   kind: __t.string(),
   title: __t.string(),
   createdByUserId: __t.u64(),
+  encryptionMode: __t.string(),
+  currentEpoch: __t.u32(),
   createdAt: __t.timestamp(),
   lastMessageAt: __t.timestamp(),
   lastMessageId: __t.option(__t.string()),
@@ -66,17 +70,94 @@ export const Message = __t.object("Message", {
   messageId: __t.string(),
   conversationId: __t.string(),
   senderUserId: __t.u64(),
-  senderIdentity: __t.identity(),
-  ciphertext: __t.string(),
+  senderDeviceId: __t.string(),
+  protocolVersion: __t.string(),
+  messageType: __t.string(),
+  conversationEpoch: __t.u32(),
   createdAt: __t.timestamp(),
 });
 export type Message = __Infer<typeof Message>;
 
+export const MessagePayload = __t.object("MessagePayload", {
+  payloadId: __t.string(),
+  messageId: __t.string(),
+  conversationId: __t.string(),
+  deliveryScope: __t.string(),
+  recipientUserId: __t.option(__t.u64()),
+  recipientDeviceId: __t.option(__t.string()),
+  ciphertext: __t.string(),
+  nonce: __t.string(),
+  aad: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type MessagePayload = __Infer<typeof MessagePayload>;
+
+export const ConversationKeyPackage = __t.object("ConversationKeyPackage", {
+  packageId: __t.string(),
+  conversationId: __t.string(),
+  epoch: __t.u32(),
+  recipientUserId: __t.u64(),
+  recipientDeviceId: __t.string(),
+  senderUserId: __t.u64(),
+  senderDeviceId: __t.string(),
+  sealedSenderKey: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type ConversationKeyPackage = __Infer<typeof ConversationKeyPackage>;
+
+export const ConversationMembershipEvent = __t.object("ConversationMembershipEvent", {
+  eventId: __t.string(),
+  conversationId: __t.string(),
+  eventType: __t.string(),
+  targetUserId: __t.u64(),
+  targetDeviceId: __t.option(__t.string()),
+  actorUserId: __t.u64(),
+  actorDeviceId: __t.option(__t.string()),
+  newEpoch: __t.u32(),
+  createdAt: __t.timestamp(),
+});
+export type ConversationMembershipEvent = __Infer<typeof ConversationMembershipEvent>;
+
 export const MyConversations = __t.object("MyConversations", {});
 export type MyConversations = __Infer<typeof MyConversations>;
 
+export const MyConversationKeyPackages = __t.object("MyConversationKeyPackages", {});
+export type MyConversationKeyPackages = __Infer<typeof MyConversationKeyPackages>;
+
 export const MyMessages = __t.object("MyMessages", {});
 export type MyMessages = __Infer<typeof MyMessages>;
+
+export const MessageViewRow = __t.object("MessageViewRow", {
+  payloadId: __t.string(),
+  messageId: __t.string(),
+  conversationId: __t.string(),
+  senderUserId: __t.u64(),
+  senderDeviceId: __t.string(),
+  protocolVersion: __t.string(),
+  messageType: __t.string(),
+  conversationEpoch: __t.u32(),
+  deliveryScope: __t.string(),
+  recipientUserId: __t.option(__t.u64()),
+  recipientDeviceId: __t.option(__t.string()),
+  ciphertext: __t.string(),
+  nonce: __t.string(),
+  aad: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type MessageViewRow = __Infer<typeof MessageViewRow>;
+
+export const ConversationKeyPackageViewRow = __t.object("ConversationKeyPackageViewRow", {
+  packageId: __t.string(),
+  conversationId: __t.string(),
+  epoch: __t.u32(),
+  recipientUserId: __t.u64(),
+  recipientDeviceId: __t.string(),
+  senderUserId: __t.u64(),
+  senderDeviceId: __t.string(),
+  sealedSenderKey: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type ConversationKeyPackageViewRow = __Infer<typeof ConversationKeyPackageViewRow>;
 
 export const MyPresence = __t.object("MyPresence", {});
 export type MyPresence = __Infer<typeof MyPresence>;
@@ -122,4 +203,3 @@ export const TypingState = __t.object("TypingState", {
   updatedAt: __t.timestamp(),
 });
 export type TypingState = __Infer<typeof TypingState>;
-

@@ -16,6 +16,7 @@
     "test:e2e:ci": "cypress run --browser chrome --reporter spec --quiet"
   },
   "dependencies": {
+    "@signalapp/libsignal-client": "^0.80.0",
     "@vitejs/plugin-react": "^4.4.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

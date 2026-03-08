@@ -11,10 +11,19 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
+  payloadId: __t.string().name("payload_id"),
   messageId: __t.string().name("message_id"),
   conversationId: __t.string().name("conversation_id"),
   senderUserId: __t.u64().name("sender_user_id"),
-  senderIdentity: __t.identity().name("sender_identity"),
+  senderDeviceId: __t.string().name("sender_device_id"),
+  protocolVersion: __t.string().name("protocol_version"),
+  messageType: __t.string().name("message_type"),
+  conversationEpoch: __t.u32().name("conversation_epoch"),
+  deliveryScope: __t.string().name("delivery_scope"),
+  recipientUserId: __t.option(__t.u64()).name("recipient_user_id"),
+  recipientDeviceId: __t.option(__t.string()).name("recipient_device_id"),
   ciphertext: __t.string(),
+  nonce: __t.string(),
+  aad: __t.string(),
   createdAt: __t.timestamp().name("created_at"),
 });

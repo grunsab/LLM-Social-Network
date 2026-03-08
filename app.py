@@ -44,6 +44,16 @@ from resources.admin import AdminAmpersoundApprovalList, AdminAmpersoundApproval
 from resources.chat import (
     ChatBootstrapResource,
     ChatDMResource,
+    ChatE2EEBootstrapResource,
+    ChatE2EEConversationDeviceBundleResource,
+    ChatE2EEDeviceLinkApproveResource,
+    ChatE2EEDeviceLinkCompleteResource,
+    ChatE2EEDeviceLinkSessionResource,
+    ChatE2EEDeviceOneTimePrekeysResource,
+    ChatE2EEDeviceRegistrationResource,
+    ChatE2EEDeviceRevokeResource,
+    ChatE2EEDeviceSignedPrekeyResource,
+    ChatE2EEUserDeviceBundleResource,
     ChatFriendsResource,
     ChatGroupMemberResource,
     ChatGroupResource,
@@ -91,6 +101,10 @@ class Config:
     SPACETIMEDB_SERVICE_TOKEN = os.environ.get('SPACETIMEDB_SERVICE_TOKEN')
     SPACETIMEDB_TOKEN_ENCRYPTION_KEY = os.environ.get('SPACETIMEDB_TOKEN_ENCRYPTION_KEY')
     SPACETIMEDB_HTTP_TIMEOUT_SECONDS = int(os.environ.get('SPACETIMEDB_HTTP_TIMEOUT_SECONDS', '15'))
+    CHAT_E2EE_ENABLED = os.environ.get('CHAT_E2EE_ENABLED', '1') != '0'
+    CHAT_E2EE_NEW_CONVERSATIONS_ENABLED = os.environ.get('CHAT_E2EE_NEW_CONVERSATIONS_ENABLED', '0') != '0'
+    CHAT_MIN_ONE_TIME_PREKEYS = int(os.environ.get('CHAT_MIN_ONE_TIME_PREKEYS', '10'))
+    CHAT_DEVICE_LINK_TTL_MINUTES = int(os.environ.get('CHAT_DEVICE_LINK_TTL_MINUTES', '10'))
 
     @staticmethod
     def init_app(app):
@@ -403,6 +417,16 @@ def create_app(config_name='default', overrides=None): # Add overrides parameter
 
         # Chat endpoints (SpacetimeDB-backed)
         api.add_resource(ChatBootstrapResource, '/api/v1/chat/bootstrap')
+        api.add_resource(ChatE2EEBootstrapResource, '/api/v1/chat/e2ee/bootstrap')
+        api.add_resource(ChatE2EEDeviceRegistrationResource, '/api/v1/chat/e2ee/devices')
+        api.add_resource(ChatE2EEDeviceLinkSessionResource, '/api/v1/chat/e2ee/device-links')
+        api.add_resource(ChatE2EEDeviceLinkApproveResource, '/api/v1/chat/e2ee/device-links/<int:link_session_id>/approve')
+        api.add_resource(ChatE2EEDeviceLinkCompleteResource, '/api/v1/chat/e2ee/device-links/<int:link_session_id>/complete')
+        api.add_resource(ChatE2EEDeviceSignedPrekeyResource, '/api/v1/chat/e2ee/devices/<string:device_id>/signed-prekey')
+        api.add_resource(ChatE2EEDeviceOneTimePrekeysResource, '/api/v1/chat/e2ee/devices/<string:device_id>/one-time-prekeys')
+        api.add_resource(ChatE2EEUserDeviceBundleResource, '/api/v1/chat/e2ee/users/<int:user_id>/device-bundles')
+        api.add_resource(ChatE2EEConversationDeviceBundleResource, '/api/v1/chat/e2ee/conversations/<string:conversation_id>/device-bundles')
+        api.add_resource(ChatE2EEDeviceRevokeResource, '/api/v1/chat/e2ee/devices/<string:device_id>/revoke')
         api.add_resource(ChatFriendsResource, '/api/v1/chat/friends')
         api.add_resource(ChatDMResource, '/api/v1/chat/dm')
         api.add_resource(ChatGroupResource, '/api/v1/chat/groups')

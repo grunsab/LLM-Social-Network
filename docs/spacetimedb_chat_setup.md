@@ -35,7 +35,11 @@ PATH="$HOME/.local/bin:$PATH" spacetime publish socialnetworkdotsocial-48xhr \
 - `SPACETIMEDB_DB_ID` (set to `c20069a056fa0538d26edbfe04785fe43b106f2fd5721f4a6555cf67f4090f93`)
 - `SPACETIMEDB_SERVICE_TOKEN` (owner/admin identity token for server-side reducers)
 - `SPACETIMEDB_TOKEN_ENCRYPTION_KEY` (Fernet key for encrypted identity token storage)
+- `CHAT_E2EE_ENABLED` (default: `1`, master switch for device bootstrap and encrypted transport)
+- `CHAT_E2EE_NEW_CONVERSATIONS_ENABLED` (default: `0`, rollout gate for creating new `e2ee_v1` conversations)
+- `CHAT_MIN_ONE_TIME_PREKEYS` (default: `10`, floor before the client tops up one-time prekeys)
+- `CHAT_DEVICE_LINK_TTL_MINUTES` (default: `10`, expiration window for linked-device approvals)
 
 ## Notes
-- `register_user_identity`, `ensure_dm`, `create_group`, and `add_group_member` are admin-gated reducers; the Flask backend brokers those operations.
-- Chat messages are stored as ciphertext payloads, enabling a future end-to-end encryption layer in the frontend.
+- `register_device_identity`, `emit_device_roster_change`, `ensure_dm`, `create_group`, and `add_group_member` are admin-gated reducers; the Flask backend brokers those operations.
+- Chat transport is now device-aware: logical `message` rows are separate from `message_payload` delivery rows, and group sender keys flow through `conversation_key_package`.

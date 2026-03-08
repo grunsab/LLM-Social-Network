@@ -34,6 +34,7 @@ def app():
         'SPACETIMEDB_DB_ID': 'c20069a056fa0538d26edbfe04785fe43b106f2fd5721f4a6555cf67f4090f93',
         'SPACETIMEDB_SERVICE_TOKEN': 'test-service-token',
         'SPACETIMEDB_TOKEN_ENCRYPTION_KEY': 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+        'CHAT_E2EE_NEW_CONVERSATIONS_ENABLED': True,
         # TestingConfig in app.py should handle:
         # 'TESTING': True,
         # 'WTF_CSRF_ENABLED': False,

@@ -15,4 +15,5 @@ export default {
   userAId: __t.u64(),
   userBId: __t.u64(),
   title: __t.string(),
+  encryptionMode: __t.option(__t.string()).name("encryption_mode"),
 };

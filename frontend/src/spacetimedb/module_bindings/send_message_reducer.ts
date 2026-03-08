@@ -12,5 +12,16 @@ import {
 
 export default {
   conversationId: __t.string(),
-  ciphertext: __t.string(),
+  protocolVersion: __t.option(__t.string()).name("protocol_version"),
+  messageType: __t.option(__t.string()).name("message_type"),
+  conversationEpoch: __t.option(__t.u32()).name("conversation_epoch"),
+  ciphertext: __t.option(__t.string()),
+  payloads: __t.option(__t.array(__t.row({
+    deliveryScope: __t.string().name("delivery_scope"),
+    recipientUserId: __t.option(__t.u64()).name("recipient_user_id"),
+    recipientDeviceId: __t.option(__t.string()).name("recipient_device_id"),
+    ciphertext: __t.string(),
+    nonce: __t.string(),
+    aad: __t.string(),
+  }))),
 };

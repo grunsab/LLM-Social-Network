@@ -8,17 +8,20 @@ import { type Infer as __Infer } from "spacetimedb";
 // Import all reducer arg schemas
 import AddGroupMemberReducer from "../add_group_member_reducer";
 import CreateGroupReducer from "../create_group_reducer";
+import EmitDeviceRosterChangeReducer from "../emit_device_roster_change_reducer";
 import EnsureDmReducer from "../ensure_dm_reducer";
 import MarkReadReducer from "../mark_read_reducer";
-import RegisterUserIdentityReducer from "../register_user_identity_reducer";
+import PublishConversationKeyPackagesReducer from "../publish_conversation_key_packages_reducer";
+import RegisterDeviceIdentityReducer from "../register_device_identity_reducer";
 import SendMessageReducer from "../send_message_reducer";
 import SetTypingReducer from "../set_typing_reducer";
 
 export type AddGroupMemberParams = __Infer<typeof AddGroupMemberReducer>;
 export type CreateGroupParams = __Infer<typeof CreateGroupReducer>;
+export type EmitDeviceRosterChangeParams = __Infer<typeof EmitDeviceRosterChangeReducer>;
 export type EnsureDmParams = __Infer<typeof EnsureDmReducer>;
 export type MarkReadParams = __Infer<typeof MarkReadReducer>;
-export type RegisterUserIdentityParams = __Infer<typeof RegisterUserIdentityReducer>;
+export type PublishConversationKeyPackagesParams = __Infer<typeof PublishConversationKeyPackagesReducer>;
+export type RegisterDeviceIdentityParams = __Infer<typeof RegisterDeviceIdentityReducer>;
 export type SendMessageParams = __Infer<typeof SendMessageReducer>;
 export type SetTypingParams = __Infer<typeof SetTypingReducer>;
-

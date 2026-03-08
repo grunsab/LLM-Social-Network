@@ -13,4 +13,6 @@ import {
 export default {
   conversationId: __t.string(),
   userId: __t.u64(),
+  actorUserId: __t.u64().name("actor_user_id"),
+  actorDeviceId: __t.option(__t.string()).name("actor_device_id"),
 };

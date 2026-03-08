@@ -15,6 +15,8 @@ export default __t.row({
   kind: __t.string(),
   title: __t.string(),
   createdByUserId: __t.u64().name("created_by_user_id"),
+  encryptionMode: __t.string().name("encryption_mode"),
+  currentEpoch: __t.u32().name("current_epoch"),
   createdAt: __t.timestamp().name("created_at"),
   lastMessageAt: __t.timestamp().name("last_message_at"),
   lastMessageId: __t.option(__t.string()).name("last_message_id"),
