@@ -43,6 +43,12 @@ class SpacetimeApiError(Exception):
         self.payload = payload
 
 
+def _spacetimedb_option(value):
+    if value is None:
+        return {"none": []}
+    return {"some": value}
+
+
 class SpacetimeHttpClient:
     def __init__(self):
         self.http_url = (current_app.config.get('SPACETIMEDB_HTTP_URL') or '').rstrip('/')
@@ -678,7 +684,7 @@ def _emit_device_roster_change(spacetime_client, user_id, device_id, change_type
             device_id,
             change_type,
             int(actor_user_id),
-            actor_device_id,
+            _spacetimedb_option(actor_device_id),
         ]
     )
 
@@ -1216,7 +1222,7 @@ class ChatDMResource(Resource):
                     low_id,
                     high_id,
                     title,
-                    encryption_mode,
+                    _spacetimedb_option(encryption_mode),
                 ]
             )
         except SpacetimeApiError as err:
@@ -1263,7 +1269,7 @@ class ChatGroupResource(Resource):
                     title.strip(),
                     int(current_user.id),
                     participant_ids,
-                    encryption_mode,
+                    _spacetimedb_option(encryption_mode),
                 ]
             )
         except SpacetimeApiError as err:
@@ -1317,7 +1323,7 @@ class ChatGroupMemberResource(Resource):
                     conversation_id,
                     int(user_id),
                     int(current_user.id),
-                    current_chat_device.device_id if current_chat_device else None,
+                    _spacetimedb_option(current_chat_device.device_id if current_chat_device else None),
                 ]
             )
         except SpacetimeApiError as err:
