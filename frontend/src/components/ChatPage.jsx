@@ -47,6 +47,7 @@ function ChatPage() {
   const [groupMemberSelections, setGroupMemberSelections] = useState(() => new Set());
   const [draftAddMemberId, setDraftAddMemberId] = useState('');
 
+  const chatPageRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const messagesViewportRef = useRef(null);
   const previousConversationRef = useRef(null);
@@ -62,6 +63,25 @@ function ChatPage() {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
+  }, []);
+
+  useEffect(() => {
+    const updateShellHeight = () => {
+      if (!chatPageRef.current || typeof window === 'undefined') {
+        return;
+      }
+
+      const top = chatPageRef.current.getBoundingClientRect().top;
+      const nextHeight = Math.max(0, window.innerHeight - top - 24);
+      chatPageRef.current.style.setProperty('--chat-shell-height', `${nextHeight}px`);
+    };
+
+    updateShellHeight();
+    window.addEventListener('resize', updateShellHeight);
+
+    return () => {
+      window.removeEventListener('resize', updateShellHeight);
+    };
   }, []);
 
   const activeConversation = useMemo(
@@ -246,7 +266,7 @@ function ChatPage() {
   );
 
   return (
-    <div className="chat-page">
+    <div ref={chatPageRef} className="chat-page">
       <aside className="chat-sidebar card">
         <div className="chat-sidebar-header">
           <h2>Chats</h2>
