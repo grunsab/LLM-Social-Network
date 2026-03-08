@@ -57,7 +57,7 @@ def upgrade():
         'chat_device',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=False),
-        sa.Column('device_id', sa.String(length=36), nullable=False),
+        sa.Column('device_id', sa.String(length=36), nullable=False, unique=True),
         sa.Column('label', sa.String(length=120), nullable=True),
         sa.Column('device_kind', device_kind_col_type, nullable=False),
         sa.Column('status', device_status_col_type, nullable=False),
@@ -77,7 +77,6 @@ def upgrade():
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('user_id', 'device_id', name='uq_chat_device_user_device')
     )
-    op.create_index('ix_chat_device_device_id', 'chat_device', ['device_id'], unique=True)
     op.create_index('ix_chat_device_status', 'chat_device', ['status'], unique=False)
     op.create_index('ix_chat_device_user_id', 'chat_device', ['user_id'], unique=False)
 
@@ -176,7 +175,6 @@ def downgrade():
 
     op.drop_index('ix_chat_device_user_id', table_name='chat_device')
     op.drop_index('ix_chat_device_status', table_name='chat_device')
-    op.drop_index('ix_chat_device_device_id', table_name='chat_device')
     op.drop_table('chat_device')
 
     bind = op.get_bind()
