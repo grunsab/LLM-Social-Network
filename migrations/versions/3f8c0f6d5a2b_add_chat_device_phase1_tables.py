@@ -7,6 +7,7 @@ Create Date: 2026-03-08 12:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -29,8 +30,10 @@ chat_device_link_session_status_enum = sa.Enum(
 
 def upgrade():
     bind = op.get_bind()
+    is_postgres = bind.dialect.name == 'postgresql'
+
     # Explicitly check for PostgreSQL enums to avoid DuplicateObject errors
-    if bind.dialect.name == 'postgresql':
+    if is_postgres:
         for enum_obj in [chat_device_kind_enum, chat_device_status_enum, chat_device_link_session_status_enum]:
             res = bind.execute(sa.text("SELECT 1 FROM pg_type WHERE typname = :name"), {"name": enum_obj.name}).fetchone()
             if not res:
@@ -40,14 +43,24 @@ def upgrade():
         chat_device_status_enum.create(bind, checkfirst=True)
         chat_device_link_session_status_enum.create(bind, checkfirst=True)
 
+    # Use create_type=False for Postgres to prevent redundant CREATE TYPE in create_table
+    if is_postgres:
+        device_kind_col_type = postgresql.ENUM('PRIMARY', 'LINKED', name='chatdevicekind', create_type=False)
+        device_status_col_type = postgresql.ENUM('PENDING_LINK', 'ACTIVE', 'REVOKED', name='chatdevicestatus', create_type=False)
+        link_session_status_col_type = postgresql.ENUM('PENDING', 'APPROVED', 'EXPIRED', 'CONSUMED', name='chatdevicelinksessionstatus', create_type=False)
+    else:
+        device_kind_col_type = chat_device_kind_enum
+        device_status_col_type = chat_device_status_enum
+        link_session_status_col_type = chat_device_link_session_status_enum
+
     op.create_table(
         'chat_device',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=False),
         sa.Column('device_id', sa.String(length=36), nullable=False),
         sa.Column('label', sa.String(length=120), nullable=True),
-        sa.Column('device_kind', sa.Enum('PRIMARY', 'LINKED', name='chatdevicekind', inherit_schema=True), nullable=False),
-        sa.Column('status', sa.Enum('PENDING_LINK', 'ACTIVE', 'REVOKED', name='chatdevicestatus', inherit_schema=True), nullable=False),
+        sa.Column('device_kind', device_kind_col_type, nullable=False),
+        sa.Column('status', device_status_col_type, nullable=False),
         sa.Column('identity_key_public', sa.Text(), nullable=False),
         sa.Column('signing_key_public', sa.Text(), nullable=False),
         sa.Column('signed_prekey_id', sa.Integer(), nullable=False),
@@ -64,9 +77,6 @@ def upgrade():
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('user_id', 'device_id', name='uq_chat_device_user_device')
     )
-    # ... rest of the tables
-    # Note: I'll use the local enum instances in create_table to avoid conflict
-    # Actually I should probably just use the names or be very careful.
     op.create_index('ix_chat_device_device_id', 'chat_device', ['device_id'], unique=True)
     op.create_index('ix_chat_device_status', 'chat_device', ['status'], unique=False)
     op.create_index('ix_chat_device_user_id', 'chat_device', ['user_id'], unique=False)
@@ -127,7 +137,7 @@ def upgrade():
         sa.Column('pending_signed_prekey_id', sa.Integer(), nullable=False),
         sa.Column('pending_signed_prekey_public', sa.Text(), nullable=False),
         sa.Column('pending_signed_prekey_signature', sa.Text(), nullable=False),
-        sa.Column('status', sa.Enum('PENDING', 'APPROVED', 'EXPIRED', 'CONSUMED', name='chatdevicelinksessionstatus', inherit_schema=True), nullable=False),
+        sa.Column('status', link_session_status_col_type, nullable=False),
         sa.Column('approval_code_hash', sa.String(length=255), nullable=False),
         sa.Column('approved_by_device_id', sa.String(length=36), nullable=True),
         sa.Column('expires_at', sa.DateTime(), nullable=False),
