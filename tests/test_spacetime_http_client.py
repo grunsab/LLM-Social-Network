@@ -40,10 +40,10 @@ def test_spacetime_call_reducer_posts_argument_array(app, monkeypatch):
         app.config['SPACETIMEDB_DB_ID'] = 'c20069a056fa0538d26edbfe04785fe43b106f2fd5721f4a6555cf67f4090f93'
         try:
             client = chat_module.SpacetimeHttpClient()
-            payload = {
-                'user_id': 1,
-                'identity': '0x0000000000000000000000000000000000000000000000000000000000000001',
-            }
+            payload = [
+                1,
+                '0x0000000000000000000000000000000000000000000000000000000000000001',
+            ]
             response = client.call_reducer('register_user_identity', payload)
         finally:
             app.config['SPACETIMEDB_DB_NAME'] = original_db_name
@@ -51,7 +51,7 @@ def test_spacetime_call_reducer_posts_argument_array(app, monkeypatch):
 
     assert response == {'ok': True}
     assert captured['url'].endswith('/v1/database/c20069a056fa0538d26edbfe04785fe43b106f2fd5721f4a6555cf67f4090f93/call/register_user_identity')
-    assert captured['json'] == [payload]
+    assert captured['json'] == payload
     assert captured['data'] is None
     assert captured['headers']['Authorization'] == 'Bearer test-service-token'
 

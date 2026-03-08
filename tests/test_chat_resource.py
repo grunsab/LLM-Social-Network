@@ -244,8 +244,8 @@ def test_group_create_success_registers_members_and_calls_reducer(client, monkey
 
     assert len(register_calls) == 3
     assert len(create_group_calls) == 1
-    assert create_group_calls[0][1]['creator_user_id'] == user_a_id
-    assert create_group_calls[0][1]['member_user_ids'] == sorted([user_a_id, user_b_id, user_c_id])
+    assert create_group_calls[0][1][2] == user_a_id
+    assert create_group_calls[0][1][3] == sorted([user_a_id, user_b_id, user_c_id])
 
 
 def test_group_member_add_success_requires_existing_membership(client, monkeypatch):
@@ -289,9 +289,9 @@ def test_group_member_add_success_requires_existing_membership(client, monkeypat
     assert add_member_calls == [
         (
             'add_group_member',
-            {
-                'conversation_id': 'grp:test-room',
-                'user_id': user_c_id,
-            }
+            [
+                'grp:test-room',
+                user_c_id,
+            ]
         )
     ]

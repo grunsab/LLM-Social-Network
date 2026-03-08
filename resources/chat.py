@@ -124,7 +124,11 @@ class SpacetimeHttpClient:
 
     def call_reducer(self, reducer_name, args):
         path = f"/v1/database/{self._db_identifier()}/call/{quote(reducer_name, safe='')}"
-        response = self._post(path, json_payload=[args], headers=self._service_headers())
+        if isinstance(args, (list, tuple)):
+            payload = list(args)
+        else:
+            payload = [args]
+        response = self._post(path, json_payload=payload, headers=self._service_headers())
         if response.status_code >= 400:
             self._handle_error(response, f"Failed to call reducer '{reducer_name}'.")
         return self._parse_json(response)
@@ -279,10 +283,10 @@ def _ensure_registered_identity(user, spacetime_client):
     mapping, token = _get_or_create_identity_mapping(user, spacetime_client)
     spacetime_client.call_reducer(
         'register_user_identity',
-        {
-            'user_id': int(user.id),
-            'identity': mapping.spacetimedb_identity,
-        }
+        [
+            int(user.id),
+            mapping.spacetimedb_identity,
+        ]
     )
     return mapping, token
 
@@ -423,12 +427,12 @@ class ChatDMResource(Resource):
             _ensure_registered_identity(target_user, client)
             client.call_reducer(
                 'ensure_dm',
-                {
-                    'conversation_id': conversation_id,
-                    'user_a_id': low_id,
-                    'user_b_id': high_id,
-                    'title': title,
-                }
+                [
+                    conversation_id,
+                    low_id,
+                    high_id,
+                    title,
+                ]
             )
         except SpacetimeApiError as err:
             abort(502, message=f"Failed to create or fetch DM conversation: {str(err)}")
@@ -468,12 +472,12 @@ class ChatGroupResource(Resource):
                 _ensure_registered_identity(user, client)
             client.call_reducer(
                 'create_group',
-                {
-                    'conversation_id': conversation_id,
-                    'title': title.strip(),
-                    'creator_user_id': int(current_user.id),
-                    'member_user_ids': participant_ids,
-                }
+                [
+                    conversation_id,
+                    title.strip(),
+                    int(current_user.id),
+                    participant_ids,
+                ]
             )
         except SpacetimeApiError as err:
             abort(502, message=f"Failed to create group conversation: {str(err)}")
@@ -520,10 +524,10 @@ class ChatGroupMemberResource(Resource):
             _ensure_registered_identity(target_user, client)
             client.call_reducer(
                 'add_group_member',
-                {
-                    'conversation_id': conversation_id,
-                    'user_id': int(user_id),
-                }
+                [
+                    conversation_id,
+                    int(user_id),
+                ]
             )
         except SpacetimeApiError as err:
             abort(502, message=f"Failed to add group member: {str(err)}")
