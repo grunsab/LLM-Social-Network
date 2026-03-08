@@ -102,6 +102,7 @@ def test_chat_bootstrap_success_creates_identity_mapping(client, monkeypatch):
     payload = response.get_json()
     assert payload['user_id'] == user_id
     assert payload['db_name'] == 'socialnetworkdotsocial-48xhr'
+    assert payload['ws_url'] == 'https://maincloud.spacetimedb.com'
     assert payload['websocket_token'].startswith('ws-identity-token-')
     assert payload['identity'].startswith('0x')
 
@@ -124,6 +125,23 @@ def test_chat_bootstrap_reuses_existing_identity_mapping(client, monkeypatch):
     assert second_response.status_code == 200
     assert first_response.get_json()['identity'] == second_response.get_json()['identity']
     assert len(call_log['created_identities']) == 1
+
+
+def test_chat_bootstrap_falls_back_to_db_id_when_name_missing(client, monkeypatch):
+    _mock_spacetime(monkeypatch)
+    _register_user(client, 'chat_bootstrap_db_id', 'chat_bootstrap_db_id@example.com')
+    _login_user(client, 'chat_bootstrap_db_id')
+
+    original_db_name = client.application.config['SPACETIMEDB_DB_NAME']
+    client.application.config['SPACETIMEDB_DB_NAME'] = None
+    try:
+        response = client.get('/api/v1/chat/bootstrap')
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload['db_name'] == 'c20069a056fa0538d26edbfe04785fe43b106f2fd5721f4a6555cf67f4090f93'
+        assert payload['db_id'] == 'c20069a056fa0538d26edbfe04785fe43b106f2fd5721f4a6555cf67f4090f93'
+    finally:
+        client.application.config['SPACETIMEDB_DB_NAME'] = original_db_name
 
 
 def test_chat_dm_requires_friendship(client, monkeypatch):

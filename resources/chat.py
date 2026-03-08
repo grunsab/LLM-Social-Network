@@ -2,6 +2,7 @@ import base64
 import re
 import uuid
 from itertools import combinations
+from urllib.parse import quote
 
 import requests
 from cryptography.fernet import Fernet, InvalidToken
@@ -33,6 +34,7 @@ class SpacetimeHttpClient:
     def __init__(self):
         self.http_url = (current_app.config.get('SPACETIMEDB_HTTP_URL') or '').rstrip('/')
         self.db_name = current_app.config.get('SPACETIMEDB_DB_NAME')
+        self.db_id = current_app.config.get('SPACETIMEDB_DB_ID')
         self.service_token = current_app.config.get('SPACETIMEDB_SERVICE_TOKEN')
         self.timeout_seconds = int(current_app.config.get('SPACETIMEDB_HTTP_TIMEOUT_SECONDS', 15))
 
@@ -60,16 +62,25 @@ class SpacetimeHttpClient:
             )
         raise SpacetimeApiError(message, status_code=response.status_code, payload=payload)
 
-    def _post(self, path, json_payload=None, headers=None):
+    def _db_identifier(self):
+        identifier = self.db_name or self.db_id
+        if not identifier:
+            raise SpacetimeApiError("Neither SPACETIMEDB_DB_NAME nor SPACETIMEDB_DB_ID is configured.")
+        return quote(identifier, safe='')
+
+    def _post(self, path, json_payload=None, data_payload=None, headers=None):
         self._require_http_base()
         url = f"{self.http_url}{path}"
-        response = requests.post(
-            url,
-            json=json_payload,
-            headers=headers or {},
-            timeout=self.timeout_seconds,
-        )
-        return response
+        try:
+            return requests.post(
+                url,
+                json=json_payload,
+                data=data_payload,
+                headers=headers or {},
+                timeout=self.timeout_seconds,
+            )
+        except requests.RequestException as err:
+            raise SpacetimeApiError(f"Failed to reach SpaceTimeDB: {str(err)}") from err
 
     def _service_headers(self):
         if not self.service_token:
@@ -88,12 +99,12 @@ class SpacetimeHttpClient:
         return {'identity': identity, 'token': token}
 
     def create_websocket_token(self, identity_token):
-        bearer_headers = {'Authorization': f'Bearer {identity_token}'}
-        response = self._post('/v1/identity/websocket-token', headers=bearer_headers)
+        basic_auth = base64.b64encode(f"{identity_token}:".encode('utf-8')).decode('utf-8')
+        basic_headers = {'Authorization': f'Basic {basic_auth}'}
+        response = self._post('/v1/identity/websocket-token', headers=basic_headers)
         if response.status_code >= 400:
-            basic_auth = base64.b64encode(f"{identity_token}:".encode('utf-8')).decode('utf-8')
-            basic_headers = {'Authorization': f'Basic {basic_auth}'}
-            response = self._post('/v1/identity/websocket-token', headers=basic_headers)
+            bearer_headers = {'Authorization': f'Bearer {identity_token}'}
+            response = self._post('/v1/identity/websocket-token', headers=bearer_headers)
         if response.status_code >= 400:
             self._handle_error(response, "Failed to create websocket token for SpaceTime identity.")
         payload = self._parse_json(response) or {}
@@ -103,19 +114,19 @@ class SpacetimeHttpClient:
         return token
 
     def call_reducer(self, reducer_name, args):
-        if not self.db_name:
-            raise SpacetimeApiError("SPACETIMEDB_DB_NAME is not configured.")
-        path = f"/v1/database/{self.db_name}/call/{reducer_name}"
-        response = self._post(path, json_payload=args, headers=self._service_headers())
+        path = f"/v1/database/{self._db_identifier()}/call/{quote(reducer_name, safe='')}"
+        response = self._post(path, json_payload=[args], headers=self._service_headers())
         if response.status_code >= 400:
             self._handle_error(response, f"Failed to call reducer '{reducer_name}'.")
         return self._parse_json(response)
 
     def run_sql(self, query):
-        if not self.db_name:
-            raise SpacetimeApiError("SPACETIMEDB_DB_NAME is not configured.")
-        path = f"/v1/database/{self.db_name}/sql"
-        response = self._post(path, json_payload={'query': query}, headers=self._service_headers())
+        path = f"/v1/database/{self._db_identifier()}/sql"
+        headers = {
+            **self._service_headers(),
+            'Content-Type': 'text/plain; charset=utf-8',
+        }
+        response = self._post(path, data_payload=query, headers=headers)
         if response.status_code >= 400:
             self._handle_error(response, "Failed to execute SpaceTime SQL query.")
         return self._normalize_sql_rows(self._parse_json(response))
@@ -124,7 +135,11 @@ class SpacetimeHttpClient:
         if payload is None:
             return []
         if isinstance(payload, list):
-            return payload
+            # The SQL HTTP API returns an array of statement results.
+            flattened_rows = []
+            for statement in payload:
+                flattened_rows.extend(self._normalize_sql_statement(statement))
+            return flattened_rows
         if not isinstance(payload, dict):
             return []
 
@@ -145,6 +160,70 @@ class SpacetimeHttpClient:
         if 'records' in payload:
             return self._normalize_sql_rows(payload.get('records'))
         return []
+
+    def _normalize_sql_statement(self, statement):
+        if not isinstance(statement, dict):
+            return []
+
+        rows = statement.get('rows') or []
+        schema = statement.get('schema') or {}
+        columns = self._schema_column_names(schema)
+
+        if not isinstance(rows, list):
+            return []
+
+        normalized = []
+        for row in rows:
+            if isinstance(row, dict):
+                normalized.append(row)
+                continue
+            if isinstance(row, list) and columns:
+                normalized.append({
+                    column_name: row[idx] if idx < len(row) else None
+                    for idx, column_name in enumerate(columns)
+                })
+                continue
+            normalized.append(row)
+        return normalized
+
+    def _schema_column_names(self, schema):
+        if not isinstance(schema, dict):
+            return []
+
+        if 'Product' in schema and isinstance(schema.get('Product'), dict):
+            schema = schema.get('Product') or {}
+
+        elements = schema.get('elements')
+        if not isinstance(elements, list):
+            return []
+
+        column_names = []
+        for index, element in enumerate(elements):
+            column_name = None
+            if isinstance(element, dict):
+                name = element.get('name')
+                if isinstance(name, str):
+                    column_name = name
+                elif isinstance(name, dict):
+                    column_name = (
+                        name.get('some')
+                        or name.get('Some')
+                        or name.get('value')
+                    )
+            column_names.append(column_name or f'col_{index}')
+        return column_names
+
+
+def _normalize_spacetimedb_client_uri(raw_uri):
+    if not raw_uri:
+        return 'https://maincloud.spacetimedb.com'
+
+    trimmed = raw_uri.rstrip('/')
+    if trimmed.startswith('wss://'):
+        return f"https://{trimmed[len('wss://'):]}"
+    if trimmed.startswith('ws://'):
+        return f"http://{trimmed[len('ws://'):]}"
+    return trimmed
 
 
 def _get_fernet():
@@ -273,11 +352,14 @@ class ChatBootstrapResource(Resource):
                 message=f"SpaceTime bootstrap failed: {str(err)}"
             )
 
-        ws_url = current_app.config.get('SPACETIMEDB_WS_URL') or 'wss://maincloud.spacetimedb.com'
+        ws_url = _normalize_spacetimedb_client_uri(
+            current_app.config.get('SPACETIMEDB_WS_URL')
+            or current_app.config.get('SPACETIMEDB_HTTP_URL')
+        )
         return {
             'ws_url': ws_url,
-            'db_name': current_app.config.get('SPACETIMEDB_DB_NAME'),
-            'db_id': current_app.config.get('SPACETIMEDB_DB_ID'),
+            'db_name': current_app.config.get('SPACETIMEDB_DB_NAME') or current_app.config.get('SPACETIMEDB_DB_ID'),
+            'db_id': current_app.config.get('SPACETIMEDB_DB_ID') or current_app.config.get('SPACETIMEDB_DB_NAME'),
             'identity': mapping.spacetimedb_identity,
             'websocket_token': websocket_token,
             'user_id': current_user.id,

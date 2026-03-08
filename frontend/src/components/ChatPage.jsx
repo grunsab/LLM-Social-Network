@@ -37,10 +37,8 @@ function ChatPage() {
     sendMessage,
     setTyping,
     markRead,
-    fetchFriends,
   } = useChat();
 
-  const [connectionError, setConnectionError] = useState('');
   const [actionError, setActionError] = useState('');
 
   const [draftMessage, setDraftMessage] = useState('');
@@ -52,20 +50,10 @@ function ChatPage() {
   const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
-    let cancelled = false;
-    ensureConnected().catch((err) => {
-      if (!cancelled) {
-        setConnectionError(err.message || 'Failed to initialize chat.');
-      }
+    ensureConnected().catch(() => {
+      // Connection errors are already surfaced through chat context state.
     });
-    fetchFriends().catch(() => {
-      // No-op; fetchFriends already updates context error state.
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [ensureConnected, fetchFriends]);
+  }, [ensureConnected]);
 
   useEffect(() => () => {
     if (typingTimeoutRef.current) {
@@ -236,7 +224,6 @@ function ChatPage() {
         </div>
 
         {loading && <p className="chat-meta">Connecting to realtime chat...</p>}
-        {connectionError && <p className="error-message">{connectionError}</p>}
         {error && <p className="error-message">{error}</p>}
 
         <div className="chat-quick-actions">
