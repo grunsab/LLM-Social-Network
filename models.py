@@ -229,7 +229,7 @@ class ChatIdentityMapping(db.Model):
 class ChatDevice(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
-    device_id = db.Column(db.String(36), nullable=False, unique=True, index=True)
+    device_id = db.Column(db.String(64), nullable=False, unique=True, index=True)
     label = db.Column(db.String(120), nullable=True)
     device_kind = db.Column(db.Enum(ChatDeviceKind), default=ChatDeviceKind.PRIMARY, nullable=False)
     status = db.Column(db.Enum(ChatDeviceStatus), default=ChatDeviceStatus.PENDING_LINK, nullable=False, index=True)
