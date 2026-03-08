@@ -97,16 +97,49 @@
 .chat-friend-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 0.4rem;
-  max-height: 120px;
+  gap: 0.5rem;
+  max-height: 180px;
   overflow: auto;
 }
 
-.chat-checkbox-row {
+.chat-group-helper {
+  margin: -0.1rem 0 0;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.chat-member-option {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  justify-content: space-between;
+  gap: 0.75rem;
   font-size: 0.9rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #dbe3ea;
+  border-radius: 0.65rem;
+  background: #fff;
+  color: #0f172a;
+  text-align: left;
+}
+
+.chat-member-option:hover {
+  border-color: #93c5fd;
+  background: #f8fbff;
+}
+
+.chat-member-option.selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.chat-member-option-name {
+  font-weight: 600;
+}
+
+.chat-member-option-state {
+  font-size: 0.78rem;
+  color: #475569;
 }
 
 .chat-list {

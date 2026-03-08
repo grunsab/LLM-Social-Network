@@ -213,6 +213,13 @@ function ChatPage() {
     return friends.filter((friend) => !participantIds.has(friend.id));
   }, [activeConversation, friends]);
 
+  const selectedGroupMemberNames = useMemo(
+    () => friends
+      .filter((friend) => groupMemberSelections.has(friend.id))
+      .map((friend) => friend.username),
+    [friends, groupMemberSelections]
+  );
+
   return (
     <div className="chat-page">
       <aside className="chat-sidebar card">
@@ -250,18 +257,37 @@ function ChatPage() {
             onChange={(event) => setGroupTitle(event.target.value)}
             placeholder="Group title"
           />
-          <div className="chat-friend-grid">
-            {friends.map((friend) => (
-              <label key={friend.id} className="chat-checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={groupMemberSelections.has(friend.id)}
-                  onChange={() => handleToggleGroupMember(friend.id)}
-                />
-                <span>{friend.username}</span>
-              </label>
-            ))}
-          </div>
+          {friends.length === 0 ? (
+            <p className="chat-meta">Add friends first to create a group.</p>
+          ) : (
+            <>
+              <p className="chat-group-helper">Select the friends to include.</p>
+              <div className="chat-friend-grid">
+                {friends.map((friend) => {
+                  const isSelected = groupMemberSelections.has(friend.id);
+                  return (
+                    <button
+                      type="button"
+                      key={friend.id}
+                      className={`chat-member-option ${isSelected ? 'selected' : ''}`}
+                      onClick={() => handleToggleGroupMember(friend.id)}
+                      aria-pressed={isSelected}
+                    >
+                      <span className="chat-member-option-name">{friend.username}</span>
+                      <span className="chat-member-option-state">
+                        {isSelected ? 'Selected' : 'Add'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedGroupMemberNames.length > 0 && (
+                <p className="chat-meta">
+                  Selected: {selectedGroupMemberNames.join(', ')}
+                </p>
+              )}
+            </>
+          )}
           <button onClick={handleCreateGroup}>Create Group</button>
         </div>
 
