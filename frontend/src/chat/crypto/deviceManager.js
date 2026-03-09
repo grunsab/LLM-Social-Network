@@ -95,22 +95,7 @@ export const createDeviceManager = ({
   store,
   prekeyService,
 } = {}) => {
-  const fetchJson = async (url, options = {}, defaultErrorMessage) => {
-    const preferredDeviceId = await resolvePreferredDeviceId();
-    const headers = { ...options.headers };
-    if (preferredDeviceId) {
-      headers['X-Chat-Device-Id'] = preferredDeviceId;
-    }
-    return defaultFetchJson(
-      fetchImpl,
-      url,
-      { ...options, headers },
-      defaultErrorMessage
-    );
-  };
-
   const resolvePreferredDeviceId = async () => {
-
     const localDevices = await store.listDevices();
     return [...localDevices]
       .filter((device) => device?.deviceId && device.status !== 'revoked')
@@ -127,6 +112,20 @@ export const createDeviceManager = ({
         );
         return rightScore - leftScore;
       })[0]?.deviceId || null;
+  };
+
+  const fetchJson = async (url, options = {}, defaultErrorMessage) => {
+    const preferredDeviceId = await resolvePreferredDeviceId();
+    const headers = { ...options.headers };
+    if (preferredDeviceId) {
+      headers['X-Chat-Device-Id'] = preferredDeviceId;
+    }
+    return defaultFetchJson(
+      fetchImpl,
+      url,
+      { ...options, headers },
+      defaultErrorMessage
+    );
   };
 
   const loadBootstrap = async (options = {}) => {

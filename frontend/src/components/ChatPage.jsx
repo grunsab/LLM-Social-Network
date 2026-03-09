@@ -66,6 +66,7 @@ function ChatPage() {
   } = useChat();
 
   const currentUserId = currentUser?.id != null ? Number(currentUser.id) : null;
+  const hasLocalEncryptedDevice = Boolean(e2ee.currentDeviceId && e2ee.localDevice);
 
   const [actionError, setActionError] = useState('');
   const [draftMessage, setDraftMessage] = useState('');
@@ -284,7 +285,6 @@ function ChatPage() {
     }
   };
 
-  const hasLocalEncryptedDevice = Boolean(e2ee.currentDeviceId && e2ee.localDevice);
   const canSendActiveConversation = !activeConversation
     || activeConversation.encryptionMode !== E2EE_ENCRYPTION_MODE
     || hasLocalEncryptedDevice;
