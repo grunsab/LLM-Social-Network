@@ -12,7 +12,7 @@ const makeJsonResponse = (payload, status = 200) => ({
   json: async () => payload,
 });
 
-test('first-device registration can recover after an interrupted response once the server-side device exists', async () => {
+test('first-device registration can recover during the same bootstrap after an interrupted response once the server-side device exists', async () => {
   const store = createIndexedDbStore();
   const prekeyService = createPrekeyService();
 
@@ -73,17 +73,12 @@ test('first-device registration can recover after an interrupted response once t
     prekeyService,
   });
 
-  await assert.rejects(
-    () => deviceManager.ensureCurrentDevice(),
-    /network interrupted/
-  );
-
-  const provisionalDevices = await store.listDevices();
-  assert.equal(provisionalDevices.length, 1);
-  assert.equal(provisionalDevices[0].deviceId, createdDeviceId);
-
   const recovered = await deviceManager.ensureCurrentDevice();
-  assert.equal(recovered.localDeviceState, 'ready');
+  assert.equal(recovered.localDeviceState, 'registered');
   assert.equal(recovered.localDevice?.deviceId, createdDeviceId);
   assert.equal(recovered.bootstrap.current_device_id, createdDeviceId);
+
+  const storedDevices = await store.listDevices();
+  assert.equal(storedDevices.length, 1);
+  assert.equal(storedDevices[0].deviceId, createdDeviceId);
 });

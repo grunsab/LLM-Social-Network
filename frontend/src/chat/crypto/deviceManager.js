@@ -215,7 +215,15 @@ export const createDeviceManager = ({
           : null;
 
         if (matchingServerDevice) {
-          await store.putDevice(mergeServerDeviceState(provisionalRecord, matchingServerDevice));
+          const recoveredLocalRecord = mergeServerDeviceState(provisionalRecord, matchingServerDevice);
+          await store.putDevice(recoveredLocalRecord);
+          return {
+            response: {
+              recovered: true,
+              device: matchingServerDevice,
+            },
+            localRecord: recoveredLocalRecord,
+          };
         } else {
           await store.deleteDevice(provisionalRecord.deviceId);
         }
