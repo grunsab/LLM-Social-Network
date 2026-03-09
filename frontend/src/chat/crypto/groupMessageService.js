@@ -101,6 +101,13 @@ export const createGroupMessageService = ({
   prekeyService,
   store,
 }) => {
+  const toReducerU64 = (value) => {
+    if (value == null) {
+      return undefined;
+    }
+    return BigInt(value);
+  };
+
   const decryptPendingPackages = async ({
     currentDeviceId,
     conversationId,
@@ -268,7 +275,10 @@ export const createGroupMessageService = ({
     await conn.reducers.publishConversationKeyPackages({
       conversationId: conversation.conversationId,
       epoch: conversation.currentEpoch,
-      packages,
+      packages: packages.map((pkg) => ({
+        ...pkg,
+        recipientUserId: toReducerU64(pkg.recipientUserId),
+      })),
     });
 
     return groupKeyManager.putLocalGroupKey({

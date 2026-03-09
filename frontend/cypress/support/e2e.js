@@ -18,6 +18,20 @@ import './commands'
 
 // Global before hook to reset test user state
 before(() => {
+  const baseUrl = String(Cypress.config('baseUrl') || '');
+  const explicitToggle = Cypress.env('testSetupEnabled');
+  const normalizedExplicitToggle = typeof explicitToggle === 'string'
+    ? !['0', 'false', 'no', 'off'].includes(explicitToggle.trim().toLowerCase())
+    : explicitToggle;
+  const shouldRunTestSetup = explicitToggle == null
+    ? /localhost|127\.0\.0\.1/.test(baseUrl)
+    : Boolean(normalizedExplicitToggle);
+
+  if (!shouldRunTestSetup) {
+    cy.log('Skipping local test-setup bootstrap for this Cypress target.');
+    return;
+  }
+
   cy.log('Attempting to reset testuser state before all tests...');
   let resetSuccessful = false;
 
@@ -26,7 +40,7 @@ before(() => {
   // The body should match what your backend endpoint expects.
   cy.request({
     method: 'POST',
-    url: '/api/v1/test-setup/reset-user-state', // <-- REPLACE THIS
+    url: '/api/v1/test-setup/reset-user-state',
     body: {
       username: 'testuser', // Standardize the username
       // Ensure these details match the expected baseline state for 'testuser'

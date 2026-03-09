@@ -30,4 +30,22 @@ export default [
       ],
     },
   },
+  {
+    files: ['cypress.config.js', 'cypress/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        Cypress: 'readonly',
+        cy: 'readonly',
+        describe: 'readonly',
+        it: 'readonly',
+        before: 'readonly',
+        beforeEach: 'readonly',
+        after: 'readonly',
+        afterEach: 'readonly',
+        expect: 'readonly',
+      },
+    },
+  },
 ]

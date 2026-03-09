@@ -24,6 +24,124 @@
 // -- This will overwrite an existing command --
 // Cypress.Commands.overwrite('visit', (originalFn, url, options) => { ... })
 
+const CHAT_E2EE_DB_NAME = 'llm-social-network-chat-e2ee';
+const CHAT_E2EE_DB_VERSION = 1;
+const CHAT_E2EE_STORES = [
+  { name: 'devices', keyPath: 'deviceId' },
+  { name: 'sessions', keyPath: 'sessionId' },
+  { name: 'groupKeys', keyPath: 'groupKeyId' },
+  { name: 'keyPackages', keyPath: 'packageId' },
+  { name: 'linkSessions', keyPath: 'linkSessionId' },
+  { name: 'meta', keyPath: 'key' },
+];
+
+const cloneSerializable = (value) => JSON.parse(JSON.stringify(value));
+
+const deleteIndexedDb = (win, dbName) => new Cypress.Promise((resolve, reject) => {
+  const request = win.indexedDB.deleteDatabase(dbName);
+  request.onsuccess = () => resolve();
+  request.onerror = () => reject(request.error || new Error(`Failed to delete IndexedDB database ${dbName}.`));
+  request.onblocked = () => reject(new Error(`IndexedDB database ${dbName} is blocked and could not be deleted.`));
+});
+
+const openChatE2eeDb = (win) => new Cypress.Promise((resolve, reject) => {
+  const request = win.indexedDB.open(CHAT_E2EE_DB_NAME, CHAT_E2EE_DB_VERSION);
+
+  request.onupgradeneeded = () => {
+    const database = request.result;
+    CHAT_E2EE_STORES.forEach(({ name, keyPath }) => {
+      if (!database.objectStoreNames.contains(name)) {
+        database.createObjectStore(name, { keyPath });
+      }
+    });
+  };
+
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => reject(request.error || new Error(`Failed to open IndexedDB database ${CHAT_E2EE_DB_NAME}.`));
+});
+
+const dumpChatE2eeState = async (win) => {
+  if (!win.indexedDB) {
+    return {
+      name: CHAT_E2EE_DB_NAME,
+      version: CHAT_E2EE_DB_VERSION,
+      stores: {},
+    };
+  }
+
+  if (typeof win.indexedDB.databases === 'function') {
+    const databases = await win.indexedDB.databases();
+    const exists = databases.some((database) => database?.name === CHAT_E2EE_DB_NAME);
+    if (!exists) {
+      return {
+        name: CHAT_E2EE_DB_NAME,
+        version: CHAT_E2EE_DB_VERSION,
+        stores: {},
+      };
+    }
+  }
+
+  const db = await openChatE2eeDb(win);
+
+  try {
+    const snapshot = {};
+    for (const { name } of CHAT_E2EE_STORES) {
+      snapshot[name] = await new Cypress.Promise((resolve, reject) => {
+        const transaction = db.transaction(name, 'readonly');
+        const store = transaction.objectStore(name);
+        const request = store.getAll();
+        request.onsuccess = () => resolve(cloneSerializable(request.result || []));
+        request.onerror = () => reject(request.error || new Error(`Failed to read IndexedDB store ${name}.`));
+      });
+    }
+
+    return {
+      name: CHAT_E2EE_DB_NAME,
+      version: CHAT_E2EE_DB_VERSION,
+      stores: snapshot,
+    };
+  } finally {
+    db.close();
+  }
+};
+
+const restoreChatE2eeState = async (win, snapshot = null) => {
+  if (!win.indexedDB) {
+    return;
+  }
+
+  await deleteIndexedDb(win, CHAT_E2EE_DB_NAME).catch((error) => {
+    if (!String(error?.message || '').includes('not found')) {
+      throw error;
+    }
+  });
+
+  if (!snapshot?.stores || Object.keys(snapshot.stores).length === 0) {
+    return;
+  }
+
+  const db = await openChatE2eeDb(win);
+
+  try {
+    await new Cypress.Promise((resolve, reject) => {
+      const transaction = db.transaction(CHAT_E2EE_STORES.map(({ name }) => name), 'readwrite');
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || new Error('Failed to restore the chat IndexedDB snapshot.'));
+      transaction.onabort = () => reject(transaction.error || new Error('Chat IndexedDB restore transaction was aborted.'));
+
+      CHAT_E2EE_STORES.forEach(({ name }) => {
+        const store = transaction.objectStore(name);
+        const values = Array.isArray(snapshot.stores?.[name]) ? snapshot.stores[name] : [];
+        values.forEach((value) => {
+          store.put(cloneSerializable(value));
+        });
+      });
+    });
+  } finally {
+    db.close();
+  }
+};
+
 Cypress.Commands.add('login', (usernameOrEmail, password) => {
   cy.session([usernameOrEmail, password], () => {
     cy.log(`Login session setup: Attempting to login as ${usernameOrEmail}`);
@@ -165,11 +283,9 @@ Cypress.Commands.add('acceptFriendRequest', (requestId) => {
 
 // Custom command to logout via API
 Cypress.Commands.add('logout', () => {
-  // We need to ensure this runs with the user's session cookie.
-  // cy.request should handle this if cy.login was used previously.
   cy.request({
-    method: 'DELETE',
-    url: '/api/v1/login',
+    method: 'POST',
+    url: '/api/v1/logout',
     failOnStatusCode: false // Allow 401 if already logged out
   }).then((response) => {
     if (response.status === 200) {
@@ -183,6 +299,18 @@ Cypress.Commands.add('logout', () => {
     cy.clearCookies(); 
     cy.clearLocalStorage(); // Also clear local storage if used for auth tokens
   });
+});
+
+Cypress.Commands.add('clearChatE2eeState', () => {
+  cy.window({ log: false }).then((win) => restoreChatE2eeState(win, null));
+});
+
+Cypress.Commands.add('captureChatE2eeState', () => (
+  cy.window({ log: false }).then((win) => dumpChatE2eeState(win))
+));
+
+Cypress.Commands.add('restoreChatE2eeState', (snapshot) => {
+  cy.window({ log: false }).then((win) => restoreChatE2eeState(win, snapshot));
 });
 
 // Custom command to delete all posts by the currently logged-in user

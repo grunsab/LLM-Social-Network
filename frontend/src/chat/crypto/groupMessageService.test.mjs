@@ -102,31 +102,42 @@ const createGroupMessageRow = ({ conversationId, epoch, senderUserId, senderDevi
   createdAtIso: new Date().toISOString(),
 });
 
-const createPackagePublisher = ({ recipientStores, senderUserId, senderDeviceId }) => ({
-  reducers: {
-    async publishConversationKeyPackages({ conversationId, epoch, packages }) {
-      let counter = 0;
-      for (const pkg of packages) {
-        const recipientStore = recipientStores.get(pkg.recipientDeviceId);
-        if (!recipientStore) {
-          continue;
-        }
-        counter += 1;
-        await recipientStore.putKeyPackage({
-          packageId: `${conversationId}:${epoch}:${pkg.recipientDeviceId}:${counter}`,
+const createPackagePublisher = ({ recipientStores, senderUserId, senderDeviceId }) => {
+  const publishedBatches = [];
+
+  return {
+    publishedBatches,
+    reducers: {
+      async publishConversationKeyPackages({ conversationId, epoch, packages }) {
+        publishedBatches.push({
           conversationId,
           epoch,
-          recipientUserId: pkg.recipientUserId,
-          recipientDeviceId: pkg.recipientDeviceId,
-          senderUserId,
-          senderDeviceId,
-          sealedSenderKey: pkg.sealedSenderKey,
-          createdAt: new Date().toISOString(),
+          packages: packages.map((pkg) => ({ ...pkg })),
         });
-      }
+
+        let counter = 0;
+        for (const pkg of packages) {
+          const recipientStore = recipientStores.get(pkg.recipientDeviceId);
+          if (!recipientStore) {
+            continue;
+          }
+          counter += 1;
+          await recipientStore.putKeyPackage({
+            packageId: `${conversationId}:${epoch}:${pkg.recipientDeviceId}:${counter}`,
+            conversationId,
+            epoch,
+            recipientUserId: Number(pkg.recipientUserId),
+            recipientDeviceId: pkg.recipientDeviceId,
+            senderUserId,
+            senderDeviceId,
+            sealedSenderKey: pkg.sealedSenderKey,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      },
     },
-  },
-});
+  };
+};
 
 test('encrypted groups publish sender-key packages and preserve old-epoch boundaries after member rekey', async () => {
   const aliceDevice = await createDeviceRecord({ label: 'Alice Group Device' });
@@ -382,4 +393,8 @@ test('device roster rekey publishes packages for a newly linked device', async (
 
   assert.equal(linkedResult.bodyText, 'after linked device');
   assert.equal(linkedResult.messageState, 'decrypted');
+  assert.ok(publisherConn.publishedBatches.length >= 2);
+  publisherConn.publishedBatches.flatMap((batch) => batch.packages).forEach((pkg) => {
+    assert.equal(typeof pkg.recipientUserId, 'bigint');
+  });
 });

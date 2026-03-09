@@ -33,6 +33,12 @@ This directory contains end-to-end tests for the Social Network application usin
    - Add/delete comments
    - Image uploads
 
+6. **chat_e2ee.cy.js** and **chat_e2ee_delivery.cy.js** - Encrypted chat coverage
+   - Create encrypted DMs and groups
+   - Verify sender and recipient delivery across separate browser key stores
+   - Verify reload persistence after encrypted sends
+   - Optionally query live SpaceTime `message` and `message_payload` tables during the test run
+
 ### ⏭️ Skipped Tests
 
 Some tests are currently skipped due to:
@@ -53,7 +59,34 @@ npm run cypress:run
 
 # Run specific test file
 npx cypress run --spec "cypress/e2e/auth.cy.js"
+
+# Run the stronger encrypted DM delivery coverage
+npm run cypress:chat-live
 ```
+
+### Live Heroku + SpaceTime diagnostics
+
+The encrypted DM delivery spec can run against a deployed frontend/backend and optionally assert on the raw SpaceTime tables. This is useful when the UI shows "Send" succeeding but no rows appear in SpaceTime.
+
+Recommended environment:
+
+```bash
+export CYPRESS_BASE_URL="https://your-heroku-app.herokuapp.com"
+export CYPRESS_TEST_SETUP_ENABLED=0
+export CYPRESS_LIVE_SPACETIME_ASSERTIONS=1
+export CYPRESS_SPACETIME_DB_NAME="your-chat-test-db"
+export CYPRESS_SPACETIME_SERVICE_TOKEN="owner-or-admin-token-for-that-test-db"
+export CYPRESS_SPACETIME_HTTP_URL="https://maincloud.spacetimedb.com"
+
+npm run cypress:chat-live
+```
+
+Notes:
+
+- Point Heroku at a dedicated SpaceTime database with a name like `*-test` before running this spec.
+- If `CYPRESS_LIVE_SPACETIME_ASSERTIONS=1` and `CYPRESS_SPACETIME_DB_NAME` is omitted, the spec will require the bootstrapped DB name to include `test` so it does not silently hit production chat storage.
+- `CYPRESS_TEST_SETUP_ENABLED=0` disables the local-only `/api/v1/test-setup/reset-user-state` bootstrap endpoint, which does not exist on production deploys.
+- The spec verifies both decrypted UI delivery and raw `message` / `message_payload` inserts, and it checks that ciphertext rows do not contain the plaintext message body.
 
 ### CI/CD
 

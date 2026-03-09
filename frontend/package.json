@@ -12,6 +12,7 @@
     "cypress:open": "cypress open",
     "cypress:run": "cypress run",
     "cypress:ci": "cypress run --browser chrome --reporter spec",
+    "cypress:chat-live": "cypress run --spec \"cypress/e2e/chat_e2ee_delivery.cy.js\"",
     "test:e2e": "cypress run",
     "test:e2e:ci": "cypress run --browser chrome --reporter spec --quiet"
   },

@@ -1,10 +1,12 @@
 import { defineConfig } from "cypress";
+import { registerSpacetimeTasks } from "./cypress/spacetimeNode.js";
 
 export default defineConfig({
   e2e: {
-    baseUrl: 'http://localhost:5173', // Frontend URL
+    baseUrl: process.env.CYPRESS_BASE_URL || 'http://localhost:5173',
     setupNodeEvents(on, config) {
-      // implement node event listeners here
+      registerSpacetimeTasks(on);
+      return config;
     },
     // Viewport settings
     viewportWidth: 1280,
@@ -25,7 +27,14 @@ export default defineConfig({
     testIsolation: true,
     // Environment variables
     env: {
-      apiUrl: 'http://localhost:5001', // Backend API URL
+      apiUrl: process.env.CYPRESS_API_URL || 'http://localhost:5001',
+      liveSpacetimeAssertions: process.env.CYPRESS_LIVE_SPACETIME_ASSERTIONS || '0',
+      spacetimeHttpUrl: process.env.CYPRESS_SPACETIME_HTTP_URL || process.env.SPACETIMEDB_HTTP_URL || 'https://maincloud.spacetimedb.com',
+      spacetimeDbName: process.env.CYPRESS_SPACETIME_DB_NAME || process.env.SPACETIMEDB_DB_NAME || '',
+      spacetimeDbId: process.env.CYPRESS_SPACETIME_DB_ID || process.env.SPACETIMEDB_DB_ID || '',
+      requireTestDbName: process.env.CYPRESS_REQUIRE_TEST_DB_NAME || '1',
+      testSetupEnabled: process.env.CYPRESS_TEST_SETUP_ENABLED,
+      chatInviteCode: process.env.CYPRESS_CHAT_INVITE_CODE || '',
     },
   },
 });

@@ -251,6 +251,13 @@ export const createChatCryptoClient = ({
     return groupMessagesByConversation(resolvedRows);
   };
 
+  const toReducerU64 = (value) => {
+    if (value == null) {
+      return undefined;
+    }
+    return BigInt(value);
+  };
+
   const sendMessage = async ({
     conn,
     conversation,
@@ -286,12 +293,18 @@ export const createChatCryptoClient = ({
           senderUserId: currentUserId,
           currentDeviceId,
         });
+      const reducerPayloads = Array.isArray(encryptedMessage.payloads)
+        ? encryptedMessage.payloads.map((payload) => ({
+          ...payload,
+          recipientUserId: toReducerU64(payload.recipientUserId),
+        }))
+        : encryptedMessage.payloads;
       await conn.reducers.sendMessage({
         conversationId: conversation.conversationId,
         protocolVersion: encryptedMessage.protocolVersion,
         messageType: encryptedMessage.messageType,
         conversationEpoch: encryptedMessage.conversationEpoch,
-        payloads: encryptedMessage.payloads,
+        payloads: reducerPayloads,
       });
       return;
     }
