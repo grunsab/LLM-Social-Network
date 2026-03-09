@@ -190,21 +190,42 @@ export const createDeviceManager = ({
       label: options.label,
       oneTimePrekeyCount,
     });
-
-    const response = await fetchJson(
-      '/api/v1/chat/e2ee/devices',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bundle.publicBundle),
-      },
-      'Failed to register this browser as a chat device.'
-    );
-
-    const localRecord = mergeServerDeviceState({
+    const provisionalRecord = {
       ...bundle.privateRecord,
       encryptionMode: E2EE_ENCRYPTION_MODE,
-    }, response.device);
+    };
+    await store.putDevice(provisionalRecord);
+
+    let response;
+    try {
+      response = await fetchJson(
+        '/api/v1/chat/e2ee/devices',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bundle.publicBundle),
+        },
+        'Failed to register this browser as a chat device.'
+      );
+    } catch (error) {
+      try {
+        const recoveryBootstrap = await loadBootstrap({ preferredDeviceId: provisionalRecord.deviceId });
+        const matchingServerDevice = Array.isArray(recoveryBootstrap?.devices)
+          ? recoveryBootstrap.devices.find((device) => device?.device_id === provisionalRecord.deviceId)
+          : null;
+
+        if (matchingServerDevice) {
+          await store.putDevice(mergeServerDeviceState(provisionalRecord, matchingServerDevice));
+        } else {
+          await store.deleteDevice(provisionalRecord.deviceId);
+        }
+      } catch {
+        // Preserve the original registration failure when recovery probes fail.
+      }
+      throw error;
+    }
+
+    const localRecord = mergeServerDeviceState(provisionalRecord, response.device);
     await store.putDevice(localRecord);
 
     return {
