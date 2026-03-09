@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
+    "playwright:chat-live": "node scripts/chat_e2ee_playwright_diagnostic.mjs",
     "cypress:open": "cypress open",
     "cypress:run": "cypress run",
     "cypress:ci": "cypress run --browser chrome --reporter spec",
@@ -38,6 +39,7 @@
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^16.0.0",
     "jsdom": "^25.0.0",
+    "playwright": "^1.58.2",
     "vitest": "^2.0.4"
   }
 }
