@@ -1184,6 +1184,7 @@ class ChatFriendsResource(Resource):
                 'id': friend.id,
                 'username': friend.username,
                 'profile_picture': friend.profile_picture,
+                'has_active_device': len(_active_chat_devices_for_user(friend.id)) > 0,
             }
             for friend in friends_sorted
         ], 200

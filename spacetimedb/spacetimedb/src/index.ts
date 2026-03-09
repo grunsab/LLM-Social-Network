@@ -685,7 +685,16 @@ export const ensure_dm = spacetimedb.reducer(
     const pair_key = `${low.toString()}:${high.toString()}`;
     const normalizedEncryptionMode = validateEncryptionMode(encryption_mode);
 
-    if (ctx.db.dmPair.pair_key.find(pair_key)) {
+    const existingPair = ctx.db.dmPair.pair_key.find(pair_key);
+    if (existingPair) {
+      const conv = ctx.db.conversation.conversation_id.find(existingPair.conversation_id);
+      if (conv && conv.encryption_mode === LEGACY_ENCRYPTION_MODE && normalizedEncryptionMode === E2EE_ENCRYPTION_MODE) {
+        ctx.db.conversation.conversation_id.update({
+          ...conv,
+          encryption_mode: E2EE_ENCRYPTION_MODE,
+          current_epoch: 1,
+        });
+      }
       return;
     }
 

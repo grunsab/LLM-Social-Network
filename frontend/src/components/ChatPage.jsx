@@ -258,6 +258,32 @@ function ChatPage() {
   const activeConversationEncryptionLabel = activeConversation?.encryptionMode === E2EE_ENCRYPTION_MODE
     ? 'End-to-end encrypted'
     : 'Server-readable';
+
+  const isUpgradable = useMemo(() => {
+    if (!activeConversation || activeConversation.kind !== 'dm' || activeConversation.encryptionMode === E2EE_ENCRYPTION_MODE) {
+      return false;
+    }
+    if (!e2ee.enabled || !e2ee.newConversationsEnabled || !hasLocalEncryptedDevice) {
+      return false;
+    }
+    // Check if the other participant has an active device
+    const otherParticipantId = activeConversation.participantUserIds?.find(id => Number(id) !== currentUserId);
+    if (!otherParticipantId) return false;
+    const otherFriend = friends.find(f => Number(f.id) === Number(otherParticipantId));
+    return Boolean(otherFriend?.has_active_device);
+  }, [activeConversation, currentUserId, e2ee.enabled, e2ee.newConversationsEnabled, friends, hasLocalEncryptedDevice]);
+
+  const handleUpgradeToSecure = async () => {
+    const otherParticipantId = activeConversation.participantUserIds?.find(id => Number(id) !== currentUserId);
+    if (!otherParticipantId) return;
+    setActionError('');
+    try {
+      await createDm(Number(otherParticipantId));
+    } catch (err) {
+      setActionError(err.message || 'Failed to upgrade to secure chat.');
+    }
+  };
+
   const hasLocalEncryptedDevice = Boolean(e2ee.currentDeviceId && e2ee.localDevice);
   const canSendActiveConversation = !activeConversation
     || activeConversation.encryptionMode !== E2EE_ENCRYPTION_MODE
@@ -877,6 +903,16 @@ function ChatPage() {
                     <span className={`chat-security-badge ${activeConversation.encryptionMode === E2EE_ENCRYPTION_MODE ? 'e2ee' : 'legacy'}`}>
                       {activeConversationEncryptionLabel}
                     </span>
+                    {isUpgradable && (
+                      <button
+                        type="button"
+                        className="chat-secondary-button"
+                        onClick={handleUpgradeToSecure}
+                        title="Both participants have chat keys. Click to enable end-to-end encryption for this conversation."
+                      >
+                        Upgrade
+                      </button>
+                    )}
                     {activeConversationStatus && (
                       <span className="chat-thread-status">{activeConversationStatus}</span>
                     )}
