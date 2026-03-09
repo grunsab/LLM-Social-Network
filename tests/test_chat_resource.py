@@ -352,7 +352,7 @@ def test_group_create_success_registers_members_and_calls_reducer(client, monkey
     assert len(create_group_calls) == 1
     assert create_group_calls[0][1][2] == user_a_id
     assert create_group_calls[0][1][3] == sorted([user_a_id, user_b_id, user_c_id])
-    assert create_group_calls[0][1][4] == 'legacy'
+    assert create_group_calls[0][1][4] == {'some': 'legacy'}
 
 
 def test_group_create_rejects_encrypted_members_without_devices(client, monkeypatch):
@@ -424,7 +424,7 @@ def test_group_member_add_success_requires_existing_membership(client, monkeypat
                 'grp:test-room',
                 user_c_id,
                 user_a_id,
-                None,
+                {'none': []},
             ]
         )
     ]

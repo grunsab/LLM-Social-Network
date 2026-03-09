@@ -35,9 +35,9 @@ This directory contains end-to-end tests for the Social Network application usin
 
 6. **chat_e2ee.cy.js** and **chat_e2ee_delivery.cy.js** - Encrypted chat coverage
    - Create encrypted DMs and groups
-   - Verify sender and recipient delivery across separate browser key stores
-   - Verify reload persistence after encrypted sends
+   - Verify sender-side encrypted DM delivery, live payload fanout, and reload persistence
    - Optionally query live SpaceTime `message` and `message_payload` tables during the test run
+   - Use the Playwright live diagnostic for true multi-browser recipient delivery checks
 
 ### ⏭️ Skipped Tests
 
@@ -86,7 +86,16 @@ Notes:
 - Point Heroku at a dedicated SpaceTime database with a name like `*-test` before running this spec.
 - If `CYPRESS_LIVE_SPACETIME_ASSERTIONS=1` and `CYPRESS_SPACETIME_DB_NAME` is omitted, the spec will require the bootstrapped DB name to include `test` so it does not silently hit production chat storage.
 - `CYPRESS_TEST_SETUP_ENABLED=0` disables the local-only `/api/v1/test-setup/reset-user-state` bootstrap endpoint, which does not exist on production deploys.
-- The spec verifies both decrypted UI delivery and raw `message` / `message_payload` inserts, and it checks that ciphertext rows do not contain the plaintext message body.
+- The Cypress spec no longer simulates two browser key stores in one browser context, because that produced false decrypt failures unrelated to the deployed app.
+- The Cypress spec now proves the sender-side encrypted send path, device-scoped payload insertion, recipient device targeting, and sender reload persistence.
+- The real multi-browser diagnostic is:
+
+```bash
+PLAYWRIGHT_BASE_URL="https://your-heroku-app.herokuapp.com" \
+PLAYWRIGHT_CHAT_INVITE_CODE_ALICE="alice-invite-code" \
+PLAYWRIGHT_CHAT_INVITE_CODE_BOB="bob-invite-code" \
+npm run playwright:chat-live
+```
 
 ### CI/CD
 
