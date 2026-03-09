@@ -258,9 +258,9 @@ export const createGroupMessageService = ({
       });
 
       packages.push({
-        recipient_user_id: targetDevice.userId,
-        recipient_device_id: targetDevice.deviceId,
-        sealed_sender_key: sealedSenderKey,
+        recipientUserId: targetDevice.userId,
+        recipientDeviceId: targetDevice.deviceId,
+        sealedSenderKey: sealedSenderKey,
       });
 
     }
@@ -367,7 +367,7 @@ export const createGroupMessageService = ({
       conversationEpoch: conversation.currentEpoch,
       payloads: [
         {
-          delivery_scope: 'conversation',
+          deliveryScope: 'conversation',
           ciphertext: serializeEnvelope({
             nonce: encryptedPayload.nonce,
             aad,

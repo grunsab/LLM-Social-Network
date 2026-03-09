@@ -402,9 +402,9 @@ export const createDirectMessageService = ({
       });
 
       payloads.push({
-        delivery_scope: 'device',
-        recipient_user_id: targetDevice.userId,
-        recipient_device_id: targetDevice.deviceId,
+        deliveryScope: 'device',
+        recipientUserId: targetDevice.userId,
+        recipientDeviceId: targetDevice.deviceId,
         ciphertext: envelope,
         nonce: encryptedPayload.nonce,
         aad,
