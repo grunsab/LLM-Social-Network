@@ -402,13 +402,14 @@ export const createDirectMessageService = ({
       });
 
       payloads.push({
-        deliveryScope: 'device',
-        recipientUserId: targetDevice.userId,
-        recipientDeviceId: targetDevice.deviceId,
+        delivery_scope: 'device',
+        recipient_user_id: targetDevice.userId,
+        recipient_device_id: targetDevice.deviceId,
         ciphertext: envelope,
         nonce: encryptedPayload.nonce,
         aad,
       });
+
     }
 
     return {
