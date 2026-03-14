@@ -331,12 +331,12 @@ export const ChatProvider = ({ children }) => {
 
       let unread = 0;
       if (!ownReadMessageId) {
-        unread = messages.filter((msg) => msg.senderUserId !== currentChatUserId).length;
+        unread = messages.filter((msg) => !msg.isHistoricalSync && msg.senderUserId !== currentChatUserId).length;
       } else {
         const lastReadIndex = messages.findIndex((msg) => msg.messageId === ownReadMessageId);
         unread = messages
           .slice(lastReadIndex >= 0 ? lastReadIndex + 1 : 0)
-          .filter((msg) => msg.senderUserId !== currentChatUserId)
+          .filter((msg) => !msg.isHistoricalSync && msg.senderUserId !== currentChatUserId)
           .length;
       }
 
@@ -831,10 +831,12 @@ export const ChatProvider = ({ children }) => {
       linkSessionId,
       approvalCode,
       approverDeviceId: approverDeviceId || e2eeStateRef.current.currentDeviceId,
+      conversations,
+      messagesByConversation,
     });
     await refreshE2eeState();
     return result;
-  }, [refreshE2eeState]);
+  }, [conversations, messagesByConversation, refreshE2eeState]);
 
   const completeDeviceLink = useCallback(async (linkSessionId) => {
     const result = await cryptoClientRef.current.completeCandidateLink(linkSessionId);

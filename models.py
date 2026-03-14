@@ -329,6 +329,8 @@ class ChatDeviceLinkSession(db.Model):
     )
     approval_code_hash = db.Column(db.String(255), nullable=False)
     approved_by_device_id = db.Column(db.String(64), db.ForeignKey('chat_device.device_id'), nullable=True)
+    history_backfill_envelope = db.Column(db.Text, nullable=True)
+    history_backfill_uploaded_at = db.Column(db.DateTime, nullable=True)
     expires_at = db.Column(db.DateTime, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = db.Column(

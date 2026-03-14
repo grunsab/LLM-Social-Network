@@ -4,6 +4,7 @@ from extensions import db
 from models import (
     ChatDevice,
     ChatDeviceKind,
+    ChatDeviceLinkSession,
     ChatDeviceStatus,
     ChatOneTimePrekey,
     ChatTransportIdentityMapping,
@@ -137,6 +138,7 @@ def test_e2ee_device_link_approve_and_complete_flow(client, monkeypatch):
     assert approve_response.status_code == 200, approve_response.get_json()
     approve_payload = approve_response.get_json()
     assert approve_payload['device']['device_id'] == 'device-linked-011'
+    assert approve_payload['pending_device_bundle']['device_id'] == 'device-linked-011'
     assert approve_payload['transport_ready'] is True
 
     complete_response = candidate_client.post(
@@ -147,6 +149,55 @@ def test_e2ee_device_link_approve_and_complete_flow(client, monkeypatch):
     assert complete_payload['status'] == 'active'
     assert complete_payload['current_device_id'] == 'device-linked-011'
     assert complete_payload['transport_ready'] is True
+
+
+def test_e2ee_device_link_history_backfill_upload_and_complete_response(client, monkeypatch):
+    _mock_spacetime(monkeypatch)
+    approver_client = client
+    candidate_client = client.application.test_client()
+
+    _register_user(approver_client, 'e2ee_link_history_user', 'e2ee_link_history_user@example.com')
+    _login_user(approver_client, 'e2ee_link_history_user')
+    register_response = approver_client.post('/api/v1/chat/e2ee/devices', json=_device_payload('device-primary-110'))
+    assert register_response.status_code == 201, register_response.get_json()
+
+    _login_user(candidate_client, 'e2ee_link_history_user')
+    link_start_response = candidate_client.post(
+        '/api/v1/chat/e2ee/device-links',
+        json=_device_payload('device-linked-111', include_prekeys=False)
+    )
+    assert link_start_response.status_code == 201, link_start_response.get_json()
+    link_payload = link_start_response.get_json()
+
+    approve_response = approver_client.post(
+        f"/api/v1/chat/e2ee/device-links/{link_payload['link_session_id']}/approve",
+        json={
+            'approval_code': link_payload['approval_code'],
+            'approver_device_id': 'device-primary-110',
+        }
+    )
+    assert approve_response.status_code == 200, approve_response.get_json()
+
+    history_upload_response = approver_client.post(
+        f"/api/v1/chat/e2ee/device-links/{link_payload['link_session_id']}/history-backfill",
+        json={
+            'history_backfill_envelope': '{"version":"linked_device_history_v1","ciphertext":"encrypted-history"}',
+        }
+    )
+    assert history_upload_response.status_code == 200, history_upload_response.get_json()
+
+    complete_response = candidate_client.post(
+        f"/api/v1/chat/e2ee/device-links/{link_payload['link_session_id']}/complete"
+    )
+    assert complete_response.status_code == 200, complete_response.get_json()
+    complete_payload = complete_response.get_json()
+    assert complete_payload['status'] == 'active'
+    assert complete_payload['history_backfill_envelope'] == '{"version":"linked_device_history_v1","ciphertext":"encrypted-history"}'
+
+    with client.application.app_context():
+        link_session = db.session.get(ChatDeviceLinkSession, link_payload['link_session_id'])
+        assert link_session.history_backfill_envelope == '{"version":"linked_device_history_v1","ciphertext":"encrypted-history"}'
+        assert link_session.history_backfill_uploaded_at is not None
 
 
 def test_e2ee_device_link_can_be_approved_without_prekeys(client, monkeypatch):

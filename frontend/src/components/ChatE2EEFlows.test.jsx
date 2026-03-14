@@ -982,7 +982,7 @@ describe('Encrypted Chat Flows', () => {
       expect(mockCrypto.getCalls().approveCandidateLink).toHaveLength(1);
     });
 
-    expect(mockCrypto.getCalls().approveCandidateLink[0]).toEqual({
+    expect(mockCrypto.getCalls().approveCandidateLink[0]).toMatchObject({
       linkSessionId: 17,
       approvalCode: 'ABCD1234',
       approverDeviceId: 'device-primary-001',

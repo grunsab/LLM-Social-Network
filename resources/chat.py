@@ -978,9 +978,39 @@ class ChatE2EEDeviceLinkApproveResource(Resource):
 
         return {
             'device': _serialize_device_summary(chat_device),
+            'pending_device_bundle': _serialize_device_bundle(chat_device, claim_prekey=False),
             'remaining_one_time_prekeys': _count_available_one_time_prekeys(chat_device),
             'transport_ready': bool(chat_device.transport_identity_mapping),
             'message': 'Chat device link approved successfully.',
+        }, 200
+
+
+class ChatE2EEDeviceLinkHistoryBackfillResource(Resource):
+    @login_required
+    def post(self, link_session_id):
+        approver_device = _require_current_chat_device()
+        link_session = db.session.get(ChatDeviceLinkSession, link_session_id)
+        if not link_session or link_session.user_id != current_user.id:
+            abort(404, message="Link session was not found.")
+
+        if link_session.status not in (
+            ChatDeviceLinkSessionStatus.APPROVED,
+            ChatDeviceLinkSessionStatus.CONSUMED,
+        ):
+            abort(409, message="Link session is not ready for history backfill.")
+
+        if link_session.approved_by_device_id and link_session.approved_by_device_id != approver_device.device_id:
+            abort(403, message="Only the approving chat device can upload history backfill for this session.")
+
+        data = request.get_json(silent=True) or {}
+        history_backfill_envelope = _require_non_empty_string(data, 'history_backfill_envelope')
+        link_session.history_backfill_envelope = history_backfill_envelope
+        link_session.history_backfill_uploaded_at = _now_utc()
+        db.session.commit()
+
+        return {
+            'message': 'Linked-device history backfill uploaded successfully.',
+            'history_backfill_uploaded_at': _serialize_datetime(link_session.history_backfill_uploaded_at),
         }, 200
 
 
@@ -1022,6 +1052,7 @@ class ChatE2EEDeviceLinkCompleteResource(Resource):
             'status': 'active',
             'current_device_id': chat_device.device_id,
             'transport_ready': bool(chat_device.transport_identity_mapping),
+            'history_backfill_envelope': link_session.history_backfill_envelope,
         }, 200
 
 

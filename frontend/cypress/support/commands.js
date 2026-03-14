@@ -25,13 +25,14 @@
 // Cypress.Commands.overwrite('visit', (originalFn, url, options) => { ... })
 
 const CHAT_E2EE_DB_NAME = 'llm-social-network-chat-e2ee';
-const CHAT_E2EE_DB_VERSION = 1;
+const CHAT_E2EE_DB_VERSION = 2;
 const CHAT_E2EE_STORES = [
   { name: 'devices', keyPath: 'deviceId' },
   { name: 'sessions', keyPath: 'sessionId' },
   { name: 'groupKeys', keyPath: 'groupKeyId' },
   { name: 'keyPackages', keyPath: 'packageId' },
   { name: 'linkSessions', keyPath: 'linkSessionId' },
+  { name: 'importedHistory', keyPath: 'historyEntryId' },
   { name: 'meta', keyPath: 'key' },
 ];
 

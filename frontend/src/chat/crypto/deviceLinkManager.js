@@ -3,6 +3,7 @@ export const createDeviceLinkManager = ({
   store,
   prekeyService,
   resolvePreferredDeviceId,
+  linkedDeviceHistoryService,
 } = {}) => {
   const parseResponsePayload = async (response) => {
     const rawText = typeof response.text === 'function' ? await response.text() : '';
@@ -109,17 +110,30 @@ export const createDeviceLinkManager = ({
       await store.putDevice(nextDevice);
 
       let prekeyUploadError = null;
+      let historyImportError = null;
       try {
         await uploadOneTimePrekeys(nextDevice.deviceId, nextDevice.oneTimePrekeys || []);
       } catch (error) {
         prekeyUploadError = error;
       }
+      if (response.history_backfill_envelope && linkedDeviceHistoryService) {
+        try {
+          await linkedDeviceHistoryService.importEncryptedHistorySnapshot({
+            currentDeviceId: nextDevice.deviceId,
+            localDevice: nextDevice,
+            encryptedEnvelope: response.history_backfill_envelope,
+          });
+        } catch (error) {
+          historyImportError = error;
+        }
+      }
       await store.deleteLinkSession(linkSessionId);
 
-      if (prekeyUploadError) {
+      if (prekeyUploadError || historyImportError) {
         return {
           ...response,
-          prekey_upload_error: prekeyUploadError.message || 'Linked device activated, but one-time prekeys still need to be uploaded.',
+          prekey_upload_error: prekeyUploadError?.message || undefined,
+          history_import_error: historyImportError?.message || undefined,
         };
       }
     }
@@ -131,6 +145,8 @@ export const createDeviceLinkManager = ({
     linkSessionId,
     approvalCode,
     approverDeviceId,
+    conversations = [],
+    messagesByConversation = {},
   }) => {
     if (!linkSessionId) {
       throw new Error('A link session ID is required before approving a linked device.');
@@ -139,7 +155,7 @@ export const createDeviceLinkManager = ({
       throw new Error('An approval code is required before approving a linked device.');
     }
 
-    return fetchJson(
+    const approvalResult = await fetchJson(
       `/api/v1/chat/e2ee/device-links/${linkSessionId}/approve`,
       {
         method: 'POST',
@@ -151,6 +167,48 @@ export const createDeviceLinkManager = ({
       },
       'Failed to approve the linked browser.'
     );
+
+    if (
+      linkedDeviceHistoryService
+      && approverDeviceId
+      && approvalResult?.pending_device_bundle?.device_id
+    ) {
+      const approverDevice = await store.getDevice(approverDeviceId);
+      const encryptedHistorySnapshot = await linkedDeviceHistoryService.encryptHistorySnapshot({
+        localDevice: approverDevice,
+        targetDevice: {
+          deviceId: approvalResult.pending_device_bundle.device_id,
+          identityKeyPublic: approvalResult.pending_device_bundle.identity_key_public,
+          signedPrekeyId: approvalResult.pending_device_bundle.signed_prekey_id,
+          signedPrekeyPublic: approvalResult.pending_device_bundle.signed_prekey_public,
+        },
+        conversations,
+        messagesByConversation,
+      });
+
+      if (encryptedHistorySnapshot) {
+        try {
+          await fetchJson(
+            `/api/v1/chat/e2ee/device-links/${linkSessionId}/history-backfill`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                history_backfill_envelope: encryptedHistorySnapshot,
+              }),
+            },
+            'Failed to upload linked-device history backfill.'
+          );
+        } catch (error) {
+          return {
+            ...approvalResult,
+            history_backfill_error: error.message || 'Failed to upload linked-device history backfill.',
+          };
+        }
+      }
+    }
+
+    return approvalResult;
   };
 
   const listPendingLinkSessions = async () => store.listLinkSessions();

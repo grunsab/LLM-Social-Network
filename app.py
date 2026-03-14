@@ -48,6 +48,7 @@ from resources.chat import (
     ChatE2EEConversationDeviceBundleResource,
     ChatE2EEDeviceLinkApproveResource,
     ChatE2EEDeviceLinkCompleteResource,
+    ChatE2EEDeviceLinkHistoryBackfillResource,
     ChatE2EEDeviceLinkSessionResource,
     ChatE2EEDeviceOneTimePrekeysResource,
     ChatE2EEDeviceRegistrationResource,
@@ -422,6 +423,7 @@ def create_app(config_name='default', overrides=None): # Add overrides parameter
         api.add_resource(ChatE2EEDeviceLinkSessionResource, '/api/v1/chat/e2ee/device-links')
         api.add_resource(ChatE2EEDeviceLinkApproveResource, '/api/v1/chat/e2ee/device-links/<int:link_session_id>/approve')
         api.add_resource(ChatE2EEDeviceLinkCompleteResource, '/api/v1/chat/e2ee/device-links/<int:link_session_id>/complete')
+        api.add_resource(ChatE2EEDeviceLinkHistoryBackfillResource, '/api/v1/chat/e2ee/device-links/<int:link_session_id>/history-backfill')
         api.add_resource(ChatE2EEDeviceSignedPrekeyResource, '/api/v1/chat/e2ee/devices/<string:device_id>/signed-prekey')
         api.add_resource(ChatE2EEDeviceOneTimePrekeysResource, '/api/v1/chat/e2ee/devices/<string:device_id>/one-time-prekeys')
         api.add_resource(ChatE2EEUserDeviceBundleResource, '/api/v1/chat/e2ee/users/<int:user_id>/device-bundles')

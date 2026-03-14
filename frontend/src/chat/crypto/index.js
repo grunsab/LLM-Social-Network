@@ -5,6 +5,7 @@ import { createDeviceManager } from './deviceManager.js';
 import { createGroupKeyManager } from './groupKeyManager.js';
 import { createGroupMessageService } from './groupMessageService.js';
 import { createIndexedDbStore } from './indexedDbStore.js';
+import { createLinkedDeviceHistoryService } from './linkedDeviceHistoryService.js';
 import {
   E2EE_ENCRYPTION_MODE,
   MESSAGE_STATE_PENDING_KEYS,
@@ -38,6 +39,7 @@ export const createChatCryptoClient = ({
   let deviceLinkManager = null;
   let directMessageService = null;
   let groupMessageService = null;
+  let linkedDeviceHistoryService = null;
 
   const getPrekeyService = () => {
     if (!prekeyService) {
@@ -57,6 +59,16 @@ export const createChatCryptoClient = ({
     return deviceManager;
   };
 
+  const getLinkedDeviceHistoryService = () => {
+    if (!linkedDeviceHistoryService) {
+      linkedDeviceHistoryService = createLinkedDeviceHistoryService({
+        prekeyService: getPrekeyService(),
+        store,
+      });
+    }
+    return linkedDeviceHistoryService;
+  };
+
   const getDeviceLinkManager = () => {
     if (!deviceLinkManager) {
       deviceLinkManager = createDeviceLinkManager({
@@ -64,6 +76,7 @@ export const createChatCryptoClient = ({
         store,
         prekeyService: getPrekeyService(),
         resolvePreferredDeviceId: () => getDeviceManager().resolvePreferredDeviceId(),
+        linkedDeviceHistoryService: getLinkedDeviceHistoryService(),
       });
     }
     return deviceLinkManager;
@@ -248,7 +261,20 @@ export const createChatCryptoClient = ({
       message,
       currentDeviceId,
     }));
-    return groupMessagesByConversation(resolvedRows);
+    const mergedMessagesByConversation = groupMessagesByConversation(resolvedRows);
+
+    const importedHistoryRows = await getLinkedDeviceHistoryService().listImportedHistory(currentDeviceId);
+    importedHistoryRows.forEach((historyMessage) => {
+      if (!mergedMessagesByConversation[historyMessage.conversationId]) {
+        mergedMessagesByConversation[historyMessage.conversationId] = [];
+      }
+      if (!mergedMessagesByConversation[historyMessage.conversationId].some((row) => row.messageId === historyMessage.messageId)) {
+        mergedMessagesByConversation[historyMessage.conversationId].push(historyMessage);
+        mergedMessagesByConversation[historyMessage.conversationId].sort((left, right) => left.createdAtMs - right.createdAtMs);
+      }
+    });
+
+    return mergedMessagesByConversation;
   };
 
   const toReducerU64 = (value) => {

@@ -1,5 +1,5 @@
 const DB_NAME = 'llm-social-network-chat-e2ee';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORE_DEFINITIONS = {
   devices: { keyPath: 'deviceId' },
@@ -7,6 +7,7 @@ const STORE_DEFINITIONS = {
   groupKeys: { keyPath: 'groupKeyId' },
   keyPackages: { keyPath: 'packageId' },
   linkSessions: { keyPath: 'linkSessionId' },
+  importedHistory: { keyPath: 'historyEntryId' },
   meta: { keyPath: 'key' },
 };
 
@@ -59,6 +60,18 @@ const createMemoryStore = () => {
     putLinkSession: (value) => putOne('linkSessions', value),
     listLinkSessions: () => getAll('linkSessions'),
     deleteLinkSession: (linkSessionId) => deleteOne('linkSessions', linkSessionId),
+    putImportedHistory: (value) => putOne('importedHistory', value),
+    listImportedHistory: async (deviceId) => {
+      const rows = await getAll('importedHistory');
+      return rows.filter((row) => row?.deviceId === deviceId);
+    },
+    clearImportedHistory: async (deviceId) => {
+      Array.from(maps.importedHistory.values())
+        .filter((row) => row?.deviceId === deviceId)
+        .forEach((row) => {
+          maps.importedHistory.delete(row.historyEntryId);
+        });
+    },
   };
 };
 
@@ -155,6 +168,20 @@ const createIndexedDbBackedStore = () => {
     putLinkSession: (value) => putOne('linkSessions', value),
     listLinkSessions: () => getAll('linkSessions'),
     deleteLinkSession: (linkSessionId) => deleteOne('linkSessions', linkSessionId),
+    putImportedHistory: (value) => putOne('importedHistory', value),
+    listImportedHistory: async (deviceId) => {
+      const rows = await getAll('importedHistory');
+      return rows.filter((row) => row?.deviceId === deviceId);
+    },
+    clearImportedHistory: async (deviceId) => withStore('importedHistory', 'readwrite', async (store) => {
+      const rows = await promisifyRequest(store.getAll());
+      await Promise.all(
+        rows
+          .filter((row) => row?.deviceId === deviceId)
+          .map((row) => promisifyRequest(store.delete(row.historyEntryId)))
+      );
+      return undefined;
+    }),
   };
 };
 
