@@ -10,6 +10,9 @@ from flask_login import current_user, login_required
 
 from models import db, Post, User, PostCategoryScore, UserImageGenerationStats
 
+# Daily limit for image remixes (expensive; kept low and separate from generations)
+DAILY_IMAGE_REMIX_LIMIT = 2
+
 # --- Parser for image remixing ---
 image_remix_parser = reqparse.RequestParser()
 image_remix_parser.add_argument('post_id', type=int, required=True, help='Post ID containing the image to remix')
@@ -172,12 +175,15 @@ class ImageRemixResource(Resource):
                 if not is_friend:
                     abort(403, message="You don't have permission to remix this image")
 
-        # Rate limiting check
+        # Rate limiting check (remixes only; generations have a separate higher limit)
         today = datetime.now(timezone.utc).date()
         stats = UserImageGenerationStats.query.filter_by(user_id=current_user.id, generation_date=today).first()
 
-        if stats and stats.count >= 20:
-            abort(429, message="You have reached your daily limit of 20 image generations/remixes.")
+        if stats and (stats.remix_count or 0) >= DAILY_IMAGE_REMIX_LIMIT:
+            abort(
+                429,
+                message=f"You have reached your daily limit of {DAILY_IMAGE_REMIX_LIMIT} image remixes.",
+            )
 
         s3_client = current_app.config.get('S3_CLIENT')
         s3_bucket = current_app.config.get('S3_BUCKET')
@@ -261,11 +267,16 @@ class ImageRemixResource(Resource):
                         )
                         db.session.add(post_category_score)
             
-            # Update generation stats
+            # Update remix stats (separate from generation count)
             if stats:
-                stats.count += 1
+                stats.remix_count = (stats.remix_count or 0) + 1
             else:
-                stats = UserImageGenerationStats(user_id=current_user.id, generation_date=today, count=1)
+                stats = UserImageGenerationStats(
+                    user_id=current_user.id,
+                    generation_date=today,
+                    count=0,
+                    remix_count=1,
+                )
                 db.session.add(stats)
             
             db.session.commit()

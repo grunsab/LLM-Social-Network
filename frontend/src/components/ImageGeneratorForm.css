@@ -5,9 +5,16 @@
 
 .image-generator-form-container h4 {
     margin-top: 0;
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
     font-size: 1.5rem; /* Consistent with CreatePostForm */
     color: var(--text-color-headings);
+}
+
+.image-generator-limit-hint {
+    margin: 0 0 1rem;
+    font-size: 0.9rem;
+    opacity: 0.85;
+    color: var(--text-color);
 }
 
 .image-generator-form-container .form-group {

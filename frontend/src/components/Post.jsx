@@ -576,6 +576,9 @@ function Post({ post, onDelete }) { // Accept post object and onDelete callback
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Remix Image</h3>
             <p>Describe how you want to transform this image:</p>
+            <p style={{ fontSize: '0.9rem', opacity: 0.85, marginBottom: '0.75rem' }}>
+              Limit: 2 remixes per day.
+            </p>
             
             <form onSubmit={handleRemix}>
               {remixError && <p className="error-message">{remixError}</p>}

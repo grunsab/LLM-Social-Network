@@ -11,6 +11,9 @@ from datetime import datetime, timezone
 
 from models import db, Post, User, PostCategoryScore, UserImageGenerationStats
 
+# Daily limit for new image generations (separate from remixes)
+DAILY_IMAGE_GENERATION_LIMIT = 100
+
 # --- Parser for image generation ---
 image_gen_parser = reqparse.RequestParser()
 image_gen_parser.add_argument('prompt', type=str, required=True, help='Prompt for image generation cannot be blank')
@@ -48,12 +51,15 @@ class ImageGenerationResource(Resource):
         args = image_gen_parser.parse_args()
         prompt = args['prompt']
 
-        # Rate limiting check
+        # Rate limiting check (generations only; remixes have a separate lower limit)
         today = datetime.now(timezone.utc).date()
         stats = UserImageGenerationStats.query.filter_by(user_id=current_user.id, generation_date=today).first()
 
-        if stats and stats.count >= 20:
-            abort(429, message="You have reached your daily limit of 20 image generations.")
+        if stats and stats.count >= DAILY_IMAGE_GENERATION_LIMIT:
+            abort(
+                429,
+                message=f"You have reached your daily limit of {DAILY_IMAGE_GENERATION_LIMIT} image generations.",
+            )
 
         openai_api_key = current_app.config.get('OPENAI_API_KEY')
         openai_client = OpenAI(
@@ -150,11 +156,16 @@ class ImageGenerationResource(Resource):
                         )
                         db.session.add(post_category_score)
             
-            # Update generation stats
+            # Update generation stats (separate from remix_count)
             if stats:
                 stats.count += 1
             else:
-                stats = UserImageGenerationStats(user_id=current_user.id, generation_date=today, count=1)
+                stats = UserImageGenerationStats(
+                    user_id=current_user.id,
+                    generation_date=today,
+                    count=1,
+                    remix_count=0,
+                )
                 db.session.add(stats)
             
             db.session.commit()

@@ -595,14 +595,18 @@ class Notification(db.Model):
     user = db.relationship('User', foreign_keys=[user_id], backref='notifications_received')
     actor = db.relationship('User', foreign_keys=[actor_id], backref='notifications_sent')
 
-# New model for tracking daily image generations by user
+# New model for tracking daily image generations and remixes by user
 class UserImageGenerationStats(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     generation_date = db.Column(db.Date, nullable=False, default=lambda: datetime.now(timezone.utc).date())
-    count = db.Column(db.Integer, default=0, nullable=False)
+    count = db.Column(db.Integer, default=0, nullable=False)  # Daily image generations
+    remix_count = db.Column(db.Integer, default=0, nullable=False)  # Daily image remixes (separate, lower limit)
 
     __table_args__ = (db.UniqueConstraint('user_id', 'generation_date', name='uq_user_generation_date'),)
 
     def __repr__(self):
-        return f'<UserImageGenerationStats UserID: {self.user_id} Date: {self.generation_date} Count: {self.count}>'
+        return (
+            f'<UserImageGenerationStats UserID: {self.user_id} Date: {self.generation_date} '
+            f'Count: {self.count} RemixCount: {self.remix_count}>'
+        )

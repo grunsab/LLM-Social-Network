@@ -56,6 +56,7 @@ function ImageGeneratorForm({ onImagePostCreated }) {
   return (
     <div className="card image-generator-form-container">
       <h4>Generate Image & Post</h4>
+      <p className="image-generator-limit-hint">Up to 100 generations per day.</p>
       {error && <p className="error-message">{error}</p>}
       {successMessage && <p className="success-message">{successMessage}</p>}
       <form onSubmit={handleSubmit}>
