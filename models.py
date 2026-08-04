@@ -410,7 +410,7 @@ class Post(db.Model):
     classification_scores = db.Column(db.JSON, nullable=True) # Store combined classification results as JSON
     comments = db.relationship('Comment', backref='post', lazy=True, cascade='all, delete-orphan')
     category_scores = db.relationship('PostCategoryScore', lazy=True, cascade='all, delete-orphan')
-    privacy = db.Column(db.Enum(PostPrivacy), default=PostPrivacy.PUBLIC, nullable=False)  # Default to public
+    privacy = db.Column(db.Enum(PostPrivacy), default=PostPrivacy.FRIENDS, nullable=False)  # Default to friends-only
     likes = db.relationship('PostLike', backref='post', lazy=True, cascade='all, delete-orphan')
     parent_post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=True)  # For tracking remixed posts
     parent_post = db.relationship('Post', remote_side=[id], backref='remixes')

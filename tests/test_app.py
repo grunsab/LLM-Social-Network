@@ -213,6 +213,27 @@ def test_create_post_unauthorized(client):
     # Expect 401 Unauthorized
     assert response.status_code == 401
 
+def test_create_post_defaults_to_friends_privacy(client):
+    """New posts should default to FRIENDS when privacy is omitted."""
+    client.post('/api/v1/register', json={
+        'username': 'privacydefaultuser',
+        'email': 'privacydefault@example.com',
+        'password': 'password123'
+    })
+    login_response = client.post('/api/v1/login', json={
+        'identifier': 'privacydefaultuser',
+        'password': 'password123'
+    })
+    assert login_response.status_code == 200
+
+    create_response = client.post('/api/v1/posts', data={
+        'content': 'This post should be friends-only by default'
+    })
+    assert create_response.status_code == 201
+    create_data = create_response.get_json()
+    assert create_data['post']['privacy'] == 'FRIENDS'
+
+
 def test_create_and_list_posts_success(client):
     """Test successfully creating a post and listing it."""
     # 1. Register and Login

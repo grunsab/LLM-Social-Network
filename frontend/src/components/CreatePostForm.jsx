@@ -8,7 +8,7 @@ function CreatePostForm({ onPostCreated }) { // Accept callback to refresh post 
   const { currentUser } = useAuth();
   const [content, setContent] = useState('');
   const [imageFile, setImageFile] = useState(null);
-  const [privacy, setPrivacy] = useState('PUBLIC'); // Default privacy
+  const [privacy, setPrivacy] = useState('FRIENDS'); // Default: friends-only
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -121,7 +121,7 @@ function CreatePostForm({ onPostCreated }) { // Accept callback to refresh post 
         // Clear the form
         setContent('');
         setImageFile(null);
-        setPrivacy('PUBLIC');
+        setPrivacy('FRIENDS');
         document.getElementById('post-image-input').value = null; // Clear file input
         
         // Notify parent component (Dashboard) to refresh posts
@@ -273,8 +273,8 @@ function CreatePostForm({ onPostCreated }) { // Accept callback to refresh post 
               onChange={(e) => setPrivacy(e.target.value)}
               className="w-auto" // Use class
             >
-              <option value="PUBLIC">Public</option>
               <option value="FRIENDS">Friends Only</option>
+              <option value="PUBLIC">Public</option>
             </select>
           </div>
           {/* Use utility class for margin */}

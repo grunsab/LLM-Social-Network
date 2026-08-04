@@ -81,12 +81,12 @@ describe('Post Management', () => {
   it.skip('should allow changing post privacy and send it in the API request', () => {
     const postContent = `A post with specific privacy - ${Date.now()}`;
 
-    // Verify default privacy is Public (optional, but good for completeness)
-    cy.get('#post-privacy').should('have.value', 'PUBLIC');
-
-    // Change privacy to Friends Only
-    cy.get('#post-privacy').select('FRIENDS');
+    // Verify default privacy is Friends Only
     cy.get('#post-privacy').should('have.value', 'FRIENDS');
+
+    // Change privacy to Public
+    cy.get('#post-privacy').select('PUBLIC');
+    cy.get('#post-privacy').should('have.value', 'PUBLIC');
 
     // Enter content
     cy.get('#post-content').type(postContent);
@@ -107,8 +107,8 @@ describe('Post Management', () => {
       expect(interception.response.body).to.have.property('post');
       const responsePost = interception.response.body.post;
       
-      // Check if privacy is set correctly
-      expect(responsePost.privacy).to.eq('FRIENDS');
+      // Check if privacy is set correctly (form was set to PUBLIC above)
+      expect(responsePost.privacy).to.eq('PUBLIC');
     });
 
     // Verify the post appears in the feed

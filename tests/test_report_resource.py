@@ -160,7 +160,7 @@ def test_successful_report_post_by_regular_user(client, create_user, create_post
 
     # Verify that the reported post's privacy has NOT changed
     original_post = Post.query.get(post_to_report.id)
-    assert original_post.privacy == PostPrivacy.PUBLIC # Assuming default is PUBLIC
+    assert original_post.privacy == PostPrivacy.PUBLIC  # create_post fixture still defaults to PUBLIC
 
 def test_successful_report_comment_by_regular_user(client, create_user, create_post, create_comment, regular_user_auth_data):
     """Test a regular user successfully reporting another user's comment."""

@@ -18,7 +18,7 @@ from utils import format_text_with_ampersounds
 post_parser = reqparse.RequestParser()
 post_parser.add_argument('content', type=str, required=False, help='Post content (text)', location='form')
 post_parser.add_argument('image', type=FileStorage, required=False, help='Image file for the post', location='files')
-post_parser.add_argument('privacy', type=str, default='PUBLIC', choices=([p.name for p in PostPrivacy]), help='Post privacy setting (PUBLIC, FRIENDS)', location='form')
+post_parser.add_argument('privacy', type=str, default='FRIENDS', choices=([p.name for p in PostPrivacy]), help='Post privacy setting (PUBLIC, FRIENDS)', location='form')
 
 list_posts_parser = reqparse.RequestParser() # For GET list
 list_posts_parser.add_argument('page', type=int, default=1, help='Page number for pagination', location='args')
