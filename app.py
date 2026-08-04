@@ -208,7 +208,7 @@ class GemmaClassification:
              print("WARN: OpenAI client not initialized (missing API key or base URL).")
 
         self.max_tokens = 1024
-        self.response_format = {"type": "json_object"}
+        self.response_format = {"type": "json"}
         self.prompt = f"""Classify the subject matter of the following information into relevant categories from the list below.
             Provide a relevance score between 0.0 and 1.0 for each category you assign (higher means more relevant).
             Return the results as a JSON object where keys are category names and values are their scores.
