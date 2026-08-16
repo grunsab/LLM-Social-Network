@@ -75,7 +75,7 @@ class ImageGenerationResource(Resource):
             # 1. Call OpenAI API to generate image
             response = openai_client.images.generate(
                 prompt=prompt,
-                model="black-forest-labs/FLUX-2-klein-9b",
+                model="black-forest-labs/FLUX-2-pro",
                 n=1,
                 size="1024x1024",
                 response_format="b64_json"
